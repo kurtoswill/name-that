@@ -98,7 +98,7 @@ const Leaderboard = () => {
 
                             {/* Right Side - Votes & Status */}
                             <div className="flex items-center bg-[#21B65F]/20 px-3 py-1 rounded-full space-x-2 border border-[#21B65F]">
-                                <span className="text-sm flex items-center gap-1">
+                                <span className="text-xs flex items-center gap-1">
                                     <p className="text-[#21B65F]">{user.votes}</p>
                                     <p className="text-[#FBE2A7]">Voted</p>
                                 </span>
