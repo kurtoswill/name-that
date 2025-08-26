@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Wallet } from 'lucide-react';
+import { ArrowLeft, Plus, Wallet, X, FileImage, FileVideo, Music } from 'lucide-react';
 import Link from 'next/link';
 import { useAccount, useConnect } from 'wagmi';
 import { ConnectWallet, Wallet as OnchainWallet } from '@coinbase/onchainkit/wallet';
@@ -51,6 +51,34 @@ export default function CreatePage() {
         if (file) {
             setUploadedFile(file);
         }
+    };
+
+    const handleRemoveFile = () => {
+        setUploadedFile(null);
+        // Reset the file input
+        const fileInput = document.getElementById('file-input') as HTMLInputElement;
+        if (fileInput) {
+            fileInput.value = '';
+        }
+    };
+
+    const getFileIcon = (file: File) => {
+        if (file.type.startsWith('image/')) {
+            return <FileImage size={20} className="text-[#E4A2B1]" />;
+        } else if (file.type.startsWith('video/')) {
+            return <FileVideo size={20} className="text-[#E4A2B1]" />;
+        } else if (file.type.startsWith('audio/')) {
+            return <Music size={20} className="text-[#E4A2B1]" />;
+        }
+        return <FileImage size={20} className="text-[#E4A2B1]" />;
+    };
+
+    const formatFileSize = (bytes: number) => {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
     const handlePost = async () => {
@@ -124,8 +152,8 @@ export default function CreatePage() {
                         type="text"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Input color"
-                        className="w-full p-4 bg-[#20333D] border border-[#324859] rounded-lg text-[#F3E3EA] placeholder-[#FBE2A7]/50 focus:outline-none focus:border-[#E4A2B1] transition-colors"
+                        placeholder="Ask the community to name your pet, product, or project"
+                        className="w-full p-3 bg-[#20333D] border border-[#324859] rounded-lg text-[#F3E3EA] placeholder-[#F3E3EA]/50 focus:outline-none focus:border-[#E4A2B1] transition-colors"
                     />
                 </div>
 
@@ -135,31 +163,51 @@ export default function CreatePage() {
                     <textarea
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Input color"
+                        placeholder="Add details to help the community come up with better names (e.g., personality, purpose, style)"
                         rows={4}
-                        className="w-full p-4 bg-[#20333D] border border-[#324859] rounded-lg text-[#F3E3EA] placeholder-[#FBE2A7]/50 focus:outline-none focus:border-[#E4A2B1] transition-colors resize-none"
+                        className="w-full p-3 bg-[#20333D] border border-[#324859] rounded-lg text-[#F3E3EA] placeholder-[#F3E3EA]/50 focus:outline-none focus:border-[#E4A2B1] transition-colors resize-none"
                     />
                 </div>
 
                 {/* Upload File */}
                 <div>
                     <label className="block text-lg font-medium mb-3">Upload File</label>
-                    <div className="relative">
-                        <input
-                            type="file"
-                            accept=".jpeg,.jpg,.mp4,.mp3"
-                            onChange={handleFileUpload}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                        <div className="w-20 h-20 bg-[#20333D] border border-[#324859] rounded-lg flex items-center justify-center cursor-pointer hover:border-[#E4A2B1] transition-colors">
-                            <Plus size={24} className="text-[#E4A2B1]" />
+
+                    {!uploadedFile ? (
+                        <div className="relative">
+                            <input
+                                id="file-input"
+                                type="file"
+                                accept=".jpeg,.jpg,.mp4,.mp3"
+                                onChange={handleFileUpload}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <div className="w-20 h-20 bg-[#20333D] border border-[#324859] rounded-lg flex items-center justify-center cursor-pointer hover:border-[#E4A2B1] transition-colors">
+                                <Plus size={24} className="text-[#E4A2B1]" />
+                            </div>
                         </div>
-                    </div>
+                    ) : (
+                        <div className="bg-[#20333D] border border-[#324859] rounded-lg p-3 flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                                {getFileIcon(uploadedFile)}
+                                <div>
+                                    <p className="text-[#F3E3EA] text-sm truncate max-w-48">{uploadedFile.name}</p>
+                                    <p className="text-[#E4A2B1]/70 text-xs">{formatFileSize(uploadedFile.size)}</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleRemoveFile}
+                                className="text-[#E4A2B1] hover:text-[#F3E3EA] transition-colors p-1"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Prize Pool */}
                 <div>
-                    <label className="block text-lg font-medium mb-3">Prize Pool</label>
+                    <label className="block text-lg font-medium">Prize Pool</label>
                     <div className="flex justify-between text-xs text-[#E4A2B1]/70 mb-3">
                         <span>Minimum: 0.00022 ETH</span>
                         <span>Rate updated: {lastUpdated.toLocaleTimeString()}</span>
@@ -172,12 +220,15 @@ export default function CreatePage() {
                                     step="0.00001"
                                     value={ethPrize}
                                     onChange={(e) => handleEthChange(e.target.value)}
-                                    className="bg-transparent text-2xl font-medium text-[#F3E3EA] focus:outline-none w-32"
-                                    placeholder="0.00022"
+                                    className="bg-transparent text-2xl font-medium text-[#F3E3EA] focus:outline-none"
+                                    placeholder="0"
+                                    style={{
+                                        width: `${Math.max(ethPrize.length + 0.5,1)}ch`
+                                    }}
                                 />
-                                <span className="text-[#FBE2A7]/70 ml-2">ETH</span>
+                                <p className="text-[#FBE2A7]/70 ml-2 whitespace-nowrap">ETH</p>
                             </div>
-                            <div className="flex items-center text-right">
+                            <div className="flex items-center whitespace-nowrap ml-auto">
                                 <span className="text-lg text-[#FBE2A7]/70">$</span>
                                 <span className="text-lg text-[#F3E3EA] ml-1">{usdPrize}</span>
                                 <span className="text-[#FBE2A7]/70 ml-1 text-sm">USD</span>
@@ -205,7 +256,7 @@ export default function CreatePage() {
                 <button
                     onClick={handlePost}
                     disabled={!isConnected}
-                    className={`w-full py-4 rounded-lg text-lg font-medium transition-colors ${
+                    className={`w-full py-2 rounded-lg text-lg font-medium transition-colors ${
                         isConnected
                             ? 'bg-[#FBE2A7] text-[#12242E] hover:bg-[#F5D982]'
                             : 'bg-[#324859] text-[#FBE2A7]/50 cursor-not-allowed'
