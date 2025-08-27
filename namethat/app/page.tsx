@@ -5,137 +5,63 @@ import { useAccount, useBalance } from 'wagmi';
 import { ConnectWallet } from '@coinbase/onchainkit/wallet';
 import PostCard from '@/app/components/PostCard';
 
+interface ApiPost { id: string; creator: string; title: string; description: string; imageUrl?: string | null; createdAt: string; prizeEth: string; usdAtCreation: string; _count?: { votes: number; suggestions: number } }
+interface ApiSuggestion { id: string; postId: string; author: string; text: string }
+
 export default function HomePage() {
     const { address, isConnected } = useAccount();
     const { data: balance } = useBalance({ address });
 
     const [username, setUsername] = useState('');
+    const [posts, setPosts] = useState<ApiPost[]>([]);
+    const [suggestionsByPost, setSuggestionsByPost] = useState<Record<string, ApiSuggestion[]>>({});
 
-    // Mock username generation from address
     useEffect(() => {
-        if (address) {
-            // Generate a simple username from address
-            setUsername(`User${address.slice(-4)}`);
-        }
+        if (address) setUsername(`User${address.slice(-4)}`);
     }, [address]);
 
-    // Mock data for posts
-    const mockPosts = [
-        {
-            id: '1',
-            author: 'Kazel Tuazon',
-            timeAgo: '2h ago',
-            image: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=300&fit=crop',
-            description: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.',
-            nameOptions: [
-                {
-                    id: '1',
-                    name: 'Frieren',
-                    author: 'kzirwinjxe',
-                    votes: 25,
-                    ethReward: '0.0001 ETH',
-                    hasVoted: false
-                },
-                {
-                    id: '2',
-                    name: 'Frieren',
-                    author: 'kzirwinjxe',
-                    votes: 18,
-                    ethReward: '0.0001 ETH',
-                    hasVoted: false
-                },
-                {
-                    id: '3',
-                    name: 'Frieren',
-                    author: 'kzirwinjxe',
-                    votes: 12,
-                    ethReward: '0.0001 ETH',
-                    hasVoted: false
-                }
-            ],
-            totalViews: 1200,
-            totalVotes: 75
-        },
-        {
-            id: '2',
-            author: 'Jane Smith',
-            timeAgo: '4h ago',
-            image: 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&h=300&fit=crop',
-            description: 'Help me name my new puppy! She loves to play and has a very energetic personality. Looking for something cute and memorable.',
-            nameOptions: [
-                {
-                    id: '4',
-                    name: 'Luna',
-                    author: 'dogLover99',
-                    votes: 42,
-                    ethReward: '0.0001 ETH',
-                    hasVoted: false
-                },
-                {
-                    id: '5',
-                    name: 'Bella',
-                    author: 'petNames',
-                    votes: 38,
-                    ethReward: '0.0001 ETH',
-                    hasVoted: false
-                },
-                {
-                    id: '6',
-                    name: 'Zoe',
-                    author: 'nameGuru',
-                    votes: 29,
-                    ethReward: '0.0001 ETH',
-                    hasVoted: false
-                }
-            ],
-            totalViews: 850,
-            totalVotes: 109
-        },
-        {
-            id: '3',
-            author: 'Alex Chen',
-            timeAgo: '6h ago',
-            image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=400&h=300&fit=crop',
-            description: 'Starting a new coffee shop and need the perfect name. The vibe is cozy, modern, and community-focused. Prize pool is generous for the winning suggestion!',
-            nameOptions: [
-                {
-                    id: '7',
-                    name: 'Brew Haven',
-                    author: 'coffeeAddict',
-                    votes: 67,
-                    ethReward: '0.0001 ETH',
-                    hasVoted: false
-                },
-                {
-                    id: '8',
-                    name: 'The Daily Grind',
-                    author: 'businessNamer',
-                    votes: 52,
-                    ethReward: '0.0001 ETH',
-                    hasVoted: false
-                },
-                {
-                    id: '9',
-                    name: 'Community Cup',
-                    author: 'localCafe',
-                    votes: 44,
-                    ethReward: '0.0001 ETH',
-                    hasVoted: false
-                }
-            ],
-            totalViews: 2100,
-            totalVotes: 163
-        }
-    ];
+    useEffect(() => {
+        const load = async () => {
+            const res = await fetch('/api/posts');
+            const json = await res.json();
+            const items: ApiPost[] = json.posts || [];
+            setPosts(items);
+            // fetch suggestions for each post (lightweight)
+            const dict: Record<string, ApiSuggestion[]> = {};
+            await Promise.all(items.map(async (p) => {
+                const sr = await fetch(`/api/suggestions?postId=${p.id}`);
+                const sj = await sr.json();
+                dict[p.id] = sj.suggestions || [];
+            }));
+            setSuggestionsByPost(dict);
+        };
+        load();
+    }, []);
 
-    const handleAddName = (postId: string) => {
-        console.log('Add name to post:', postId);
-        // Handle add name logic
+    const handleAddName = async (postId: string, newName: string) => {
+        if (!address) return;
+        await fetch('/api/suggestions', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postId, author: address, text: newName })
+        });
+        // refresh suggestions
+        const sr = await fetch(`/api/suggestions?postId=${postId}`);
+        const sj = await sr.json();
+        setSuggestionsByPost(prev => ({ ...prev, [postId]: sj.suggestions || [] }));
     };
 
-    const handleVote = (postId: string, optionId: string) => {
-        console.log('Vote for option:', optionId, 'in post:', postId);
-        // Handle voting logic
+    const handleVote = async (postId: string, optionId: string) => {
+        if (!address) return;
+        await fetch('/api/votes', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postId, suggestionId: optionId, voter: address })
+        });
+    };
+
+    const timeAgo = (d: string) => {
+        const diff = Date.now() - new Date(d).getTime();
+        const h = Math.max(1, Math.floor(diff / (1000*60*60)));
+        return `${h}h ago`;
     };
 
     return (
@@ -153,36 +79,44 @@ export default function HomePage() {
                             </ConnectWallet>
                         </div>
                     ) : (
-                        <div className="flex items-center bg-[#20333D] px-3 py-2 rounded-lg border border-[#324859]">
-                            <div className="w-2 h-2 bg-[#21B65F] rounded-full mr-2"></div>
-                            <div className="text-sm">
-                                <div className="text-[#F3E3EA] font-medium">{username}</div>
-                                <div className="text-[#FBE2A7]/70 text-xs">
-                                    {balance ? `${parseFloat(balance.formatted).toFixed(4)} ${balance.symbol}` : '0.0000 ETH'}
+                        <a href="/profile">
+                            <div className="flex items-center bg-[#20333D] px-3 py-2 rounded-lg border border-[#324859]">
+                                <div className="w-2 h-2 bg-[#21B65F] rounded-full mr-2"></div>
+                                <div className="text-sm">
+                                    <div className="text-[#F3E3EA] font-medium">{username}</div>
+                                    <div className="text-[#FBE2A7]/70 text-xs">
+                                        {balance ? `${parseFloat(balance.formatted).toFixed(4)} ${balance.symbol}` : '0.0000 ETH'}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        </a>
                     )}
                 </div>
             </div>
 
             {/* Post Feed */}
             <div className="p-4 pb-24">
-                {mockPosts.map((post) => (
-                    <PostCard
-                        key={post.id}
-                        id={post.id}
-                        author={post.author}
-                        timeAgo={post.timeAgo}
-                        image={post.image}
-                        description={post.description}
-                        nameOptions={post.nameOptions}
-                        totalViews={post.totalViews}
-                        totalVotes={post.totalVotes}
-                        onAddName={() => handleAddName(post.id)}
-                        onVote={(optionId) => handleVote(post.id, optionId)}
-                    />
-                ))}
+                {posts.map((post) => {
+                    const sug = suggestionsByPost[post.id] || [];
+                    const nameOptions = sug.slice(0,5).map((s) => ({ id: s.id, name: s.text, author: s.author, ethReward: '—', hasVoted: false }));
+                    return (
+                        <PostCard
+                            key={post.id}
+                            id={post.id}
+                            author={`${post.creator.slice(0,6)}...${post.creator.slice(-4)}`}
+                            timeAgo={timeAgo(post.createdAt)}
+                            image={post.imageUrl || ''}
+                            description={post.description}
+                            nameOptions={nameOptions}
+                            totalViews={0}
+                            totalVotes={post._count?.votes || 0}
+                            totalPrize={parseFloat(post.prizeEth)}
+                            isWalletConnected={isConnected}
+                            onAddName={(newName) => handleAddName(post.id, newName)}
+                            onVote={(optionId) => handleVote(post.id, optionId)}
+                        />
+                    );
+                })}
             </div>
         </div>
     );

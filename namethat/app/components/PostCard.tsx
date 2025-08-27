@@ -18,6 +18,7 @@ interface PostCardProps {
     nameOptions: NameOption[];
     totalViews: number;
     totalVotes: number;
+    totalPrize?: number; // in ETH
     isWalletConnected: boolean;
     onAddName?: (newName: string) => void;
     onVote?: (optionId: string) => void;
@@ -32,6 +33,7 @@ export default function PostCard({
                                      nameOptions,
                                      totalViews,
                                      totalVotes,
+                                     totalPrize,
                                      isWalletConnected,
                                      onAddName,
                                      onVote
@@ -41,6 +43,10 @@ export default function PostCard({
     const [showVoteConfirm, setShowVoteConfirm] = useState<string | null>(null);
     const [showAddName, setShowAddName] = useState(false);
     const [newNameInput, setNewNameInput] = useState('');
+
+    // Calculate prize distribution (80% after 20% platform fee)
+    const prizeAfterFees = totalPrize ? totalPrize * 0.8 : 0;
+    const prizePerVote = totalPrize && totalVotes > 0 ? prizeAfterFees / totalVotes : 0;
 
     const truncateText = (text: string, maxLength: number) => {
         if (text.length <= maxLength) return text;
@@ -96,6 +102,30 @@ export default function PostCard({
                         <div className="text-[#FBE2A7]/70 text-xs">{timeAgo}</div>
                     </div>
                 </div>
+
+                {/* Prize Info Banner - only show if totalPrize exists */}
+                {totalPrize && (
+                    <div className="bg-[#324859] rounded-lg p-3 mb-4 border border-[#21B65F]/30">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-[#21B65F] text-sm font-medium">
+                                    Prize Pool: {totalPrize} ETH
+                                </div>
+                                <div className="text-[#F3E3EA]/70 text-xs mt-1">
+                                    After 20% fee: {prizeAfterFees.toFixed(4)} ETH
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-[#FBE2A7] text-sm font-medium">
+                                    ~{prizePerVote.toFixed(6)} ETH
+                                </div>
+                                <div className="text-[#F3E3EA]/70 text-xs">
+                                    per vote
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Image */}
                 <div className="mb-4">

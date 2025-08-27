@@ -49,6 +49,11 @@ export default function CreatePage() {
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
+            if (!file.type.startsWith('image/')) {
+                alert('Only image files are allowed.');
+                (event.target as HTMLInputElement).value = '';
+                return;
+            }
             setUploadedFile(file);
         }
     };
@@ -63,13 +68,6 @@ export default function CreatePage() {
     };
 
     const getFileIcon = (file: File) => {
-        if (file.type.startsWith('image/')) {
-            return <FileImage size={20} className="text-[#E4A2B1]" />;
-        } else if (file.type.startsWith('video/')) {
-            return <FileVideo size={20} className="text-[#E4A2B1]" />;
-        } else if (file.type.startsWith('audio/')) {
-            return <Music size={20} className="text-[#E4A2B1]" />;
-        }
         return <FileImage size={20} className="text-[#E4A2B1]" />;
     };
 
@@ -90,29 +88,46 @@ export default function CreatePage() {
             alert('Please fill in all required fields');
             return;
         }
+        // Enforce $1 minimum based on current rate
+        if (parseFloat(usdPrize) < 1) {
+            alert('Minimum prize is $1 USD equivalent. Please increase the ETH amount.');
+            return;
+        }
 
         try {
-            // Handle post submission logic here
-            const postData = {
-                title,
-                description,
-                ethPrize: parseFloat(ethPrize),
-                usdPrize: parseFloat(usdPrize),
-                file: uploadedFile,
-                walletAddress: address,
-                prizeDistribution: {
-                    winner: 0.5, // 50% to winner
-                    voters: 0.3, // 30% to voters of winning name
-                    creators: 0.2 // 20% to creators
+            let imageUrl: string | undefined = undefined;
+            if (uploadedFile) {
+                const formData = new FormData();
+                formData.append('file', uploadedFile);
+                const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+                const uploadJson = await uploadRes.json();
+                if (!uploadRes.ok) {
+                    throw new Error(uploadJson.error || 'Image upload failed');
                 }
-            };
+                imageUrl = uploadJson.url;
+            }
 
-            console.log('Posting:', postData);
-            // Add your post submission API call here
-
+            const res = await fetch('/api/posts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    description,
+                    imageUrl,
+                    prizeEth: parseFloat(ethPrize),
+                    creator: address,
+                }),
+            });
+            const json = await res.json();
+            if (!res.ok) {
+                throw new Error(json.error || 'Failed to create post');
+            }
+            alert('Post created!');
+            // Optionally redirect
+            window.location.href = '/';
         } catch (error) {
             console.error('Failed to post:', error);
-            alert('Failed to create post. Please try again.');
+            alert((error as Error).message || 'Failed to create post. Please try again.');
         }
     };
 
@@ -178,7 +193,7 @@ export default function CreatePage() {
                             <input
                                 id="file-input"
                                 type="file"
-                                accept=".jpeg,.jpg,.mp4,.mp3"
+                                accept="image/*"
                                 onChange={handleFileUpload}
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             />
@@ -195,12 +210,18 @@ export default function CreatePage() {
                                     <p className="text-[#E4A2B1]/70 text-xs">{formatFileSize(uploadedFile.size)}</p>
                                 </div>
                             </div>
-                            <button
-                                onClick={handleRemoveFile}
-                                className="text-[#E4A2B1] hover:text-[#F3E3EA] transition-colors p-1"
-                            >
-                                <X size={16} />
-                            </button>
+                            <div className="flex items-center gap-3">
+                                {uploadedFile && (
+                                  // Preview
+                                  <img src={URL.createObjectURL(uploadedFile)} alt="preview" className="w-16 h-16 object-cover rounded-md border border-[#324859]" />
+                                )}
+                                <button
+                                    onClick={handleRemoveFile}
+                                    className="text-[#E4A2B1] hover:text-[#F3E3EA] transition-colors p-1"
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>

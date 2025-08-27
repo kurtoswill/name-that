@@ -1,15 +1,26 @@
 import { Redis } from "@upstash/redis";
 
-if (!process.env.REDIS_URL || !process.env.REDIS_TOKEN) {
-  console.warn(
-    "REDIS_URL or REDIS_TOKEN environment variable is not defined, please add to enable background notifications and webhooks.",
-  );
+let client: Redis | null = null;
+
+export function getRedis(): Redis | null {
+  try {
+    if (client) return client;
+    const url = process.env.REDIS_URL;
+    const token = process.env.REDIS_TOKEN;
+    if (!url || !token) return null;
+    client = new Redis({ url, token });
+    return client;
+  } catch {
+    return null;
+  }
 }
 
-export const redis =
-  process.env.REDIS_URL && process.env.REDIS_TOKEN
-    ? new Redis({
-        url: process.env.REDIS_URL,
-        token: process.env.REDIS_TOKEN,
-      })
-    : null;
+export async function notifyAfterOneDay(postId: string, creator: string) {
+  // Prototype: push a reminder item with dueAt timestamp
+  const redis = getRedis();
+  const dueAt = Date.now() + 24 * 60 * 60 * 1000;
+  const payload = { type: "reminder_pick_winner", postId, creator, dueAt };
+  if (!redis) return payload; // no-op if not configured
+  await redis.rpush("notifications:queue", JSON.stringify(payload));
+  return payload;
+}

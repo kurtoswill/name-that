@@ -1,16 +1,54 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Trophy, Medal, Award } from "lucide-react";
+import UserPostCard from '@/app/components/UserPostCard';
+import { useAccount } from 'wagmi';
+
+interface ApiPost { id: string; creator: string; description: string; imageUrl?: string | null; createdAt: string; prizeEth: string; _count?: { votes: number } }
+interface ApiSuggestion { id: string; postId: string; author: string; text: string }
 
 const ProfilePage = () => {
-    const [activeTab, setActiveTab] = useState("Leaderboards");
+    const [activeTab, setActiveTab] = useState("Post");
+    const { address, isConnected } = useAccount();
 
-    const leaderboardData = [
-        { id: 1, rank: 1, name: "Emilia", username: "kzlrwnjne", timeAgo: "3d ago", votes: "25k" },
-        { id: 2, rank: 2, name: "Frieren", username: "kzlrwnjne", timeAgo: "4d ago", votes: "19k" },
-        { id: 3, rank: 3, name: "Gojo Satorou", username: "kzlrwnjne", timeAgo: "5d ago", votes: "15k" },
-    ];
+    const [posts, setPosts] = useState<ApiPost[]>([]);
+    const [suggestionsByPost, setSuggestionsByPost] = useState<Record<string, ApiSuggestion[]>>({});
+
+    useEffect(() => {
+        const load = async () => {
+            const res = await fetch('/api/posts');
+            const json = await res.json();
+            const items: ApiPost[] = (json.posts || []).filter((p: ApiPost) => address ? p.creator.toLowerCase() === address.toLowerCase() : false);
+            setPosts(items);
+            const dict: Record<string, ApiSuggestion[]> = {};
+            await Promise.all(items.map(async (p) => {
+                const sr = await fetch(`/api/suggestions?postId=${p.id}`);
+                const sj = await sr.json();
+                dict[p.id] = sj.suggestions || [];
+            }));
+            setSuggestionsByPost(dict);
+        };
+        if (address) load();
+    }, [address]);
+
+    const timeAgo = (d: string) => {
+        const diff = Date.now() - new Date(d).getTime();
+        const h = Math.max(1, Math.floor(diff / (1000*60*60)));
+        return `${h}h ago`;
+    };
+
+    const handlePickWinner = async (postId: string, optionId: string) => {
+        if (!address) return;
+        await fetch('/api/winner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ postId, winnerSuggestionId: optionId, caller: address }) });
+        // reload posts
+        const res = await fetch('/api/posts');
+        const json = await res.json();
+        const items: ApiPost[] = (json.posts || []).filter((p: ApiPost) => address ? p.creator.toLowerCase() === address.toLowerCase() : false);
+        setPosts(items);
+    };
+
+    const leaderboardData = [];
 
     const getRankStyle = (rank: number) => {
         switch (rank) {
@@ -38,8 +76,14 @@ const ProfilePage = () => {
         }
     };
 
+    const handlePickWinner = (postId: string, optionId: string) => {
+        console.log('Pick winner for post:', postId, 'Option:', optionId);
+        // Handle pick winner logic
+    };
+
     return (
         <div className="min-h-screen bg-[#12242E] text-[#F3E3EA] p-4">
+
             {/* Profile Card */}
             <div className="bg-[#20333D] rounded-xl p-6 max-w-md mx-auto mb-6 text-center border border-[#324859]">
                 <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-[#F3E3EA] to-[#E4A2B1] flex items-center justify-center text-[#12242E] font-semibold text-2xl">
@@ -48,8 +92,24 @@ const ProfilePage = () => {
                 <h2 className="mt-4 font-semibold text-lg">Kazel Tuazon</h2>
                 <p className="text-[#F3E3EA]/70 text-sm">kzlrwnjne</p>
                 <p className="mt-3 text-sm text-[#F3E3EA]/80">
-                    🌟 Photographer & NFT creator | Building on Base | Seeking creative alpha from the FC community
+                    Photographer & NFT creator | Building on Base | Seeking creative alpha from the FC community
                 </p>
+
+                {/* Stats */}
+                <div className="flex justify-center space-x-6 mt-4 text-center">
+                    <div>
+                        <div className="text-[#FBE2A7] font-semibold">{userPosts.length}</div>
+                        <div className="text-[#F3E3EA]/70 text-xs">Posts</div>
+                    </div>
+                    <div>
+                        <div className="text-[#FBE2A7] font-semibold">1.3 ETH</div>
+                        <div className="text-[#F3E3EA]/70 text-xs">Total Prizes</div>
+                    </div>
+                    <div>
+                        <div className="text-[#FBE2A7] font-semibold">245</div>
+                        <div className="text-[#F3E3EA]/70 text-xs">Total Votes</div>
+                    </div>
+                </div>
             </div>
 
             {/* Tabs */}
@@ -68,6 +128,37 @@ const ProfilePage = () => {
                     </button>
                 ))}
             </div>
+
+            {/* Post Tab */}
+            {activeTab === "Post" && (
+                <div className="max-w-md mx-auto">
+                    {userPosts.length > 0 ? (
+                        userPosts.map((post) => (
+                            <UserPostCard
+                                key={post.id}
+                                id={post.id}
+                                author={post.author}
+                                timeAgo={post.timeAgo}
+                                image={post.image}
+                                description={post.description}
+                                nameOptions={post.nameOptions}
+                                totalViews={post.totalViews}
+                                totalVotes={post.totalVotes}
+                                totalPrize={post.totalPrize}
+                                isWalletConnected={true} // Assume connected on profile page
+                                onPickWinner={(optionId) => handlePickWinner(post.id, optionId)}
+                            />
+                        ))
+                    ) : (
+                        <div className="text-center py-12">
+                            <div className="text-[#FBE2A7]/70 text-lg mb-2">No posts yet</div>
+                            <div className="text-[#F3E3EA]/50 text-sm">
+                                Start creating posts to see them here
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Leaderboard Tab */}
             {activeTab === "Leaderboards" && (
@@ -89,7 +180,7 @@ const ProfilePage = () => {
                                         {user.rank <= 3 ? getRankIcon(user.rank) : user.rank}
                                     </div>
 
-                                    {/* Image posted */}
+                                    {/* Avatar */}
                                     <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#F3E3EA] to-[#E4A2B1] flex items-center justify-center text-[#12242E] font-semibold">
                                         {user.name.charAt(0)}
                                     </div>
@@ -105,10 +196,10 @@ const ProfilePage = () => {
 
                                 {/* Votes Badge */}
                                 <div className="flex items-center bg-[#21B65F]/20 px-3 py-1 rounded-full space-x-2 border border-[#21B65F]">
-                                  <span className="text-xs flex items-center gap-1">
-                                    <p className="text-[#21B65F]">{user.votes}</p>
-                                    <p className="text-[#FBE2A7]">Voted</p>
-                                  </span>
+                                    <span className="text-xs flex items-center gap-1">
+                                        <p className="text-[#21B65F]">{user.votes}</p>
+                                        <p className="text-[#FBE2A7]">Voted</p>
+                                    </span>
                                 </div>
                             </div>
                         </div>
