@@ -58,8 +58,13 @@ export async function POST(request: NextRequest) {
     })
 
     return NextResponse.json({ vote }, { status: 201 })
-  } catch (error: any) {
-    if (error?.code === 'P2002') {
+  } catch (error: unknown) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as Record<string, unknown>).code === 'P2002'
+    ) {
       return NextResponse.json({ error: 'User has already voted on this post' }, { status: 409 });
     }
     console.error('Error creating vote:', error)

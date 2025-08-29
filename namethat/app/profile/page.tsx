@@ -76,11 +76,6 @@ const ProfilePage = () => {
         }
     };
 
-    const handlePickWinner = (postId: string, optionId: string) => {
-        console.log('Pick winner for post:', postId, 'Option:', optionId);
-        // Handle pick winner logic
-    };
-
     return (
         <div className="min-h-screen bg-[#12242E] text-[#F3E3EA] p-4">
 
@@ -98,7 +93,7 @@ const ProfilePage = () => {
                 {/* Stats */}
                 <div className="flex justify-center space-x-6 mt-4 text-center">
                     <div>
-                        <div className="text-[#FBE2A7] font-semibold">{userPosts.length}</div>
+                        <div className="text-[#FBE2A7] font-semibold">{posts.length}</div>
                         <div className="text-[#F3E3EA]/70 text-xs">Posts</div>
                     </div>
                     <div>
@@ -132,8 +127,8 @@ const ProfilePage = () => {
             {/* Post Tab */}
             {activeTab === "Post" && (
                 <div className="max-w-md mx-auto">
-                    {userPosts.length > 0 ? (
-                        userPosts.map((post) => (
+                    {posts.length > 0 ? (
+                        posts.map((post) => (
                             <UserPostCard
                                 key={post.id}
                                 id={post.id}
