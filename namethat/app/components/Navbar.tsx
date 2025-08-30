@@ -14,7 +14,7 @@ export default function Navbar() {
     }
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 border-t border-[#E4A2B1] bg-[#12242E]">
+        <div className="fixed bottom-0 left-0 right-0 border-t border-[#E4A2B1] bg-[#12242E] z-50">
             <div className="flex items-center justify-center px-6 py-4 pb-7">
                 <ul className="flex items-center space-x-14">
                     <li>

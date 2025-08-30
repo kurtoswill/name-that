@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAccount, useBalance } from 'wagmi';
 import { ConnectWallet } from '@coinbase/onchainkit/wallet';
 import PostCard from '@/app/components/PostCard';
+import Image from 'next/image';
 
 interface ApiPost { id: string; creator: string; title: string; description: string; imageUrl?: string | null; createdAt: string; prizeEth: string; usdAtCreation: string; _count?: { votes: number; suggestions: number } }
 interface ApiSuggestion { id: string; postId: string; author: string; text: string }
@@ -120,22 +121,22 @@ export default function HomePage() {
 
     const timeAgo = (d: string) => {
         const diff = Date.now() - new Date(d).getTime();
-        const h = Math.max(1, Math.floor(diff / (1000*60*60)));
+        const h = Math.max(1, Math.floor(diff / (1000 * 60 * 60)));
         return `${h}h ago`;
     };
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-[#1a2f3a] to-[#12242E] text-[#F3E3EA] relative overflow-hidden">
             {/* Background gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-b from-[#1a2f3a]/80 to-[#12242E]/90"></div>
-            
+                <div className="absolute inset-0 bg-gradient-to-b from-[#1a2f3a]/80 to-[#12242E]/90"></div>
+
             {/* Header with wallet connection only */}
             <div className="sticky top-0 z-20 p-4">
                 <div className="flex items-center justify-between">
                     <h1 className="text-xl font-semibold text-[#F3E3EA]">NameThat</h1>
                     {!isConnected ? (
-                        <div className="mini-app-theme">
-                            <ConnectWallet className="bg-[#21B65F] hover:bg-[#1ea856] text-[#12242E] px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        <div className="mini-app-theme" style={{ touchAction: 'manipulation' }}>
+                            <ConnectWallet className="bg-[#21B65F] hover:bg-[#1ea856] text-[#12242E] px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
                                 <span>Connect Wallet</span>
                             </ConnectWallet>
                         </div>
@@ -160,9 +161,11 @@ export default function HomePage() {
                 {/* Glowing NameThat Title */}
                 <div className="text-center mb-16 relative">
                     <div className="relative inline-block">
-                        <img 
-                            src="/NameThat.svg" 
-                            alt="NameThat" 
+                        <Image
+                            src="/NameThat.svg"
+                            alt="NameThat"
+                            width={320}
+                            height={80}
                             className="w-64 md:w-80 h-auto animate-glow"
                             style={{
                                 filter: 'drop-shadow(0 0 20px rgba(228, 162, 177, 0.6)) drop-shadow(0 0 40px rgba(251, 226, 167, 0.4))'
@@ -175,7 +178,7 @@ export default function HomePage() {
                 <div className="relative w-full max-w-4xl">
                     <div className="flex items-center justify-center">
                         {/* Left character (blurred) */}
-                        <div className="absolute left-0 transform -translate-x-1/2 w-48 h-48 opacity-60 blur-sm animate-float" style={{animationDelay: '0.5s'}}>
+                        <div className="absolute left-0 transform -translate-x-1/2 w-48 h-48 opacity-60 blur-sm animate-float" style={{ animationDelay: '0.5s' }}>
                             <div className="w-full h-full bg-gradient-to-br from-[#E4A2B1] to-[#FBE2A7] rounded-lg p-1">
                                 <div className="w-full h-full bg-[#20333D] rounded-lg flex items-center justify-center">
                                     <div className="text-center text-white/60">
@@ -200,13 +203,13 @@ export default function HomePage() {
                                     </div>
                                     {/* Enhanced glow effect */}
                                     <div className="absolute inset-0 bg-gradient-to-br from-[#E4A2B1]/20 to-[#FBE2A7]/20 rounded-lg blur-xl animate-pulse-glow"></div>
-                                    <div className="absolute inset-0 bg-gradient-to-br from-[#E4A2B1]/10 to-[#FBE2A7]/10 rounded-lg blur-2xl animate-pulse-glow" style={{animationDelay: '2s'}}></div>
+                                    <div className="absolute inset-0 bg-gradient-to-br from-[#E4A2B1]/10 to-[#FBE2A7]/10 rounded-lg blur-2xl animate-pulse-glow" style={{ animationDelay: '2s' }}></div>
                                 </div>
                             </div>
                         </div>
 
                         {/* Right character (blurred) */}
-                        <div className="absolute right-0 transform translate-x-1/2 w-48 h-48 opacity-60 blur-sm animate-float" style={{animationDelay: '1.5s'}}>
+                        <div className="absolute right-0 transform translate-x-1/2 w-48 h-48 opacity-60 blur-sm animate-float" style={{ animationDelay: '1.5s' }}>
                             <div className="w-full h-full bg-gradient-to-br from-[#E4A2B1] to-[#FBE2A7] rounded-lg p-1">
                                 <div className="w-full h-full bg-[#20333D] rounded-lg flex items-center justify-center">
                                     <div className="text-center text-white/60">
@@ -220,12 +223,12 @@ export default function HomePage() {
                 </div>
 
                 {/* Scroll indicator */}
-                <div className="mt-16 text-center text-[#FBE2A7]/80 animate-float" style={{animationDelay: '2.5s'}}>
+                <div className="mt-16 text-center text-[#FBE2A7]/80 animate-float" style={{ animationDelay: '2.5s' }}>
                     <div className="w-6 h-6 mx-auto mb-2">
                         <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
                             {/* Double upward-pointing chevron/arrow */}
-                            <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
-                            <path d="M7.41 11.41L12 6.83l4.59 4.58L18 10l-6-6-6 6z"/>
+                            <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" />
+                            <path d="M7.41 11.41L12 6.83l4.59 4.58L18 10l-6-6-6 6z" />
                         </svg>
                     </div>
                     <div className="text-sm">Scroll up</div>

@@ -24,18 +24,18 @@ interface UserPostCardProps {
 }
 
 export default function UserPostCard({
-                                         id,
-                                         author,
-                                         timeAgo,
-                                         image,
-                                         description,
-                                         nameOptions,
-                                         totalViews,
-                                         totalVotes,
-                                         totalPrize,
-                                         isWalletConnected,
-                                         onPickWinner
-                                     }: UserPostCardProps) {
+    id,
+    author,
+    timeAgo,
+    image,
+    description,
+    nameOptions,
+    totalViews,
+    totalVotes,
+    totalPrize,
+    isWalletConnected,
+    onPickWinner
+}: UserPostCardProps) {
     const [expandedDescription, setExpandedDescription] = useState(false);
     const [showPickWinner, setShowPickWinner] = useState<string | null>(null);
     const [selectedWinner, setSelectedWinner] = useState<string | null>(null);
@@ -159,11 +159,10 @@ export default function UserPostCard({
                         return (
                             <div
                                 key={option.id}
-                                className={`rounded-lg p-3 flex items-center justify-between border ${
-                                    isWinner
+                                className={`rounded-lg p-3 flex items-center justify-between border ${isWinner
                                         ? 'bg-[#21B65F]/10 border-[#21B65F]'
                                         : 'bg-[#324859] border-[#324859]'
-                                }`}
+                                    }`}
                             >
                                 <div className="flex-1">
                                     <div className="flex items-center">
@@ -185,11 +184,10 @@ export default function UserPostCard({
                                         <button
                                             onClick={() => handlePickWinnerClick(option.id)}
                                             disabled={!isWalletConnected}
-                                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                                                !isWalletConnected
+                                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${!isWalletConnected
                                                     ? 'bg-[#324859] border border-[#324859] text-[#FBE2A7]/50 cursor-not-allowed'
                                                     : 'bg-[#FBE2A7]/20 text-[#FBE2A7] hover:bg-[#FBE2A7] border border-[#FBE2A7] hover:text-[#12242E] cursor-pointer'
-                                            }`}
+                                                }`}
                                             title={!isWalletConnected ? 'Connect wallet to pick winner' : undefined}
                                         >
                                             {!isWalletConnected ? 'Connect wallet' : 'Pick Winner'}
