@@ -9,8 +9,8 @@ datasource db {
 
 model User {
   id       String @id // wallet address as primary key
-  username String?
-  profile  Json?  // for metadata
+  username String? // default is `User${address.slice(-6)}`
+  profile  Json?  // for metadata, default is "<div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-[#F3E3EA] to-[#E4A2B1] flex items-center justify-center text-[#12242E] font-semibold text-2xl">" with the capital inital letter of the User
 
   // Relations
   posts       Post[]

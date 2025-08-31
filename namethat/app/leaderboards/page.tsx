@@ -3,9 +3,9 @@
 import React, { useEffect, useState } from 'react';
 import LeaderboardCard from '@/app/components/LeaderboardCard';
 
-interface LBRow { 
-    postId: string; 
-    totalVotes?: number; 
+interface LBRow {
+    postId: string;
+    totalVotes?: number;
     score?: number;
     createdAt?: string; // ISO date string
     totalViews?: number;
@@ -16,23 +16,23 @@ const calculateTrendingScore = (votes: number, views: number, createdAt: string)
     const now = new Date();
     const postDate = new Date(createdAt);
     const ageInHours = Math.max(1, (now.getTime() - postDate.getTime()) / (1000 * 60 * 60));
-    
+
     // Base engagement rate (votes per view)
     const engagementRate = views > 0 ? votes / views : 0;
-    
+
     // Time decay factor (newer posts get higher scores)
     const timeDecay = Math.max(0.1, 1 / Math.pow(ageInHours / 24, 0.5)); // Decay over days
-    
+
     // Vote velocity (votes per hour)
     const voteVelocity = votes / ageInHours;
-    
+
     // Trending score formula
     const trendingScore = (
         (engagementRate * 100) + // Engagement rate component
         (voteVelocity * 10) +   // Vote velocity component
         (timeDecay * 50)        // Time decay bonus
     ) * Math.min(2, 1 + (votes / 1000)); // Scale factor for popular posts
-    
+
     return Math.round(trendingScore * 100) / 100; // Round to 2 decimal places
 };
 
@@ -90,11 +90,10 @@ const Leaderboard = () => {
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                            activeTab === tab
+                        className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === tab
                                 ? 'bg-[#324859] text-[#F3E3EA]'
                                 : 'text-[#F3E3EA]/60 hover:text-[#F3E3EA]'
-                        }`}
+                            }`}
                     >
                         {tab}
                     </button>
@@ -102,7 +101,7 @@ const Leaderboard = () => {
             </div>
 
             {/* Leaderboard */}
-            <div className="max-w-md mx-auto space-y-3">
+            <div className="max-w-md mx-auto space-y-3 pb-10">
                 {rows.map((row, i) => (
                     <LeaderboardCard
                         key={i}

@@ -16,6 +16,7 @@ export default function HomePage() {
     const [username, setUsername] = useState('');
     const [posts, setPosts] = useState<ApiPost[]>([]);
     const [suggestionsByPost, setSuggestionsByPost] = useState<Record<string, ApiSuggestion[]>>({});
+    const [user, setUser] = useState<any>(null);
 
     // Sample post data for demonstration
     const samplePosts = [
@@ -78,10 +79,6 @@ export default function HomePage() {
     ];
 
     useEffect(() => {
-        if (address) setUsername(`User${address.slice(-4)}`);
-    }, [address]);
-
-    useEffect(() => {
         const load = async () => {
             const res = await fetch('/api/posts');
             const json = await res.json();
@@ -98,6 +95,29 @@ export default function HomePage() {
         };
         load();
     }, []);
+
+    useEffect(() => {
+    const syncUser = async () => {
+        if (!address) return;
+        const res = await fetch('/api/user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: address })
+        });
+        if (!res.ok) {
+            // Optionally log the error response
+            const text = await res.text();
+            console.error('User API error:', res.status, text);
+            return;
+        }
+        const data = await res.json();
+        setUser(data);
+        setUsername(data.username || `User${address.slice(-6)}`);
+    };
+    if (isConnected && address) {
+        syncUser();
+    }
+}, [isConnected, address]);
 
     const handleAddName = async (postId: string, newName: string) => {
         if (!address) return;
