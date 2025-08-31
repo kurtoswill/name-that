@@ -23,6 +23,7 @@ interface PostCardProps {
     totalVotes: number;
     totalPrize?: number; // in ETH
     isWalletConnected: boolean;
+    votedSuggestionId?: string; // suggestionId the user voted for this post
     onAddName?: (newName: string, setAddNameError: (msg: string) => void) => void;
     onVote?: (optionId: string) => void;
 }
@@ -38,11 +39,14 @@ export default function PostCard({
     totalVotes,
     totalPrize,
     isWalletConnected,
+    votedSuggestionId,
     onAddName,
     onVote
 }: PostCardProps) {
     const [expandedDescription, setExpandedDescription] = useState(false);
-    const [votedOptions, setVotedOptions] = useState<Set<string>>(new Set());
+    const [votedOptions, setVotedOptions] = useState<Set<string>>(
+        votedSuggestionId ? new Set([votedSuggestionId]) : new Set()
+    );
     const [showVoteConfirm, setShowVoteConfirm] = useState<string | null>(null);
     const [showAddName, setShowAddName] = useState(false);
     const [newNameInput, setNewNameInput] = useState('');
@@ -61,6 +65,13 @@ export default function PostCard({
 
     // Helper to check if user has voted on this post
     const hasVotedOnPost = votedOptions.size > 0;
+
+    // If votedSuggestionId changes (e.g. after login), update votedOptions
+    useEffect(() => {
+        if (votedSuggestionId) {
+            setVotedOptions(new Set([votedSuggestionId]));
+        }
+    }, [votedSuggestionId]);
 
     // Helper to check if user has already suggested for this post
     const { address } = useAccount();

@@ -10,19 +10,17 @@ import Image from 'next/image';
 interface ApiPost { id: string; creator: string; title: string; description: string; imageUrl?: string | null; createdAt: string; prizeEth: string; usdAtCreation: string; _count?: { votes: number; suggestions: number; views: number } }
 interface ApiSuggestion { id: string; postId: string; author: string; text: string; votes?: number }
 
+
 export default function HomePage() {
     const { address, isConnected } = useAccount();
     const { data: balance } = useBalance({ address });
 
     const [username, setUsername] = useState('');
     const [posts, setPosts] = useState<ApiPost[]>([]);
-    const [suggestionsByPost, setSuggestionsByPost] = useState<Record<string, ApiSuggestion>>({});
-    
-    // Use polling hook to get real-time view updates
-
+    const [suggestionsByPost, setSuggestionsByPost] = useState<Record<string, ApiSuggestion[]>>({});
     const [user, setUser] = useState<any>(null);
-
     const [usernames, setUsernames] = useState<Record<string, string>>({});
+    const [userVotes, setUserVotes] = useState<Record<string, string>>({}); // postId -> suggestionId
 
     useEffect(() => {
         const load = async () => {
@@ -34,13 +32,11 @@ export default function HomePage() {
 
             // Fetch suggestions for each post
             const dict: Record<string, ApiSuggestion[]> = {};
-
             await Promise.all(items.map(async (p) => {
                 const srRes = await fetch(`/api/suggestions?postId=${p.id}`);
                 const sj = await srRes.json();
                 dict[p.id] = sj.suggestions || [];
             }));
-            
             setSuggestionsByPost(dict);
 
             // Fetch usernames for post creators and suggestion authors
@@ -61,9 +57,23 @@ export default function HomePage() {
                 }
             }));
             setUsernames(usernameDict);
+
+            // Fetch user's votes for all posts (if connected)
+            if (address) {
+                const votesRes = await fetch(`/api/votes?voter=${address}`);
+                if (votesRes.ok) {
+                    const votesJson = await votesRes.json();
+                    // votes: [{ postId, suggestionId, ... }]
+                    const voteMap: Record<string, string> = {};
+                    (votesJson.votes || []).forEach((v: any) => {
+                        if (v.postId && v.suggestionId) voteMap[v.postId] = v.suggestionId;
+                    });
+                    setUserVotes(voteMap);
+                }
+            }
         };
         load();
-    }, []); // Only run on initial load
+    }, [address]); // re-run if address changes
 
     useEffect(() => {
     const syncUser = async () => {
@@ -291,7 +301,7 @@ export default function HomePage() {
                             ethReward: post.prizeEth + ' ETH',
                             voteCount: s.votes?.toString() || '0'
                         }));
-                        
+                        const votedSuggestionId = userVotes[post.id];
                         return (
                             <PostCard
                                 key={post.id}
@@ -305,6 +315,7 @@ export default function HomePage() {
                                 totalVotes={post._count?.votes || 0}
                                 totalPrize={parseFloat(post.prizeEth)}
                                 isWalletConnected={isConnected}
+                                votedSuggestionId={votedSuggestionId}
                                 onAddName={(newName, setAddNameError) => handleAddName(post.id, newName, setAddNameError)}
                                 onVote={(optionId) => handleVote(post.id, optionId)}
                             />

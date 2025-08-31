@@ -79,12 +79,15 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const postId = searchParams.get('postId') || undefined;
+    const voter = searchParams.get('voter') || undefined;
+    const where: any = {};
+    if (postId) where.postId = postId;
+    if (voter) where.voter = voter;
     const votes = await db.vote.findMany({
-      where: postId ? { postId } : {},
+      where,
       orderBy: { createdAt: 'desc' }
-    })
-
-    return NextResponse.json({ votes })
+    });
+    return NextResponse.json({ votes });
   } catch (error) {
     console.error('Error fetching votes:', error)
     return NextResponse.json(
