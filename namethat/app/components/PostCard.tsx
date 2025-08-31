@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Eye, X } from 'lucide-react';
+import { Plus, Eye, X, Check } from 'lucide-react';
 import Image from 'next/image';
 import { usePostView } from '../hooks/usePostView';
 import { useAccount } from 'wagmi';
@@ -23,7 +23,7 @@ interface PostCardProps {
     totalVotes: number;
     totalPrize?: number; // in ETH
     isWalletConnected: boolean;
-    onAddName?: (newName: string) => void;
+    onAddName?: (newName: string, setAddNameError: (msg: string) => void) => void;
     onVote?: (optionId: string) => void;
 }
 
@@ -47,6 +47,8 @@ export default function PostCard({
     const [showAddName, setShowAddName] = useState(false);
     const [newNameInput, setNewNameInput] = useState('');
     const [voteError, setVoteError] = useState<string | null>(null);
+    const [addNameError, setAddNameError] = useState<string | null>(null);
+    const [addNameSuccess, setAddNameSuccess] = useState(false);
 
     // Calculate prize distribution (80% after 20% platform fee)
     const prizeAfterFees = totalPrize ? totalPrize * 0.8 : 0;
@@ -60,6 +62,17 @@ export default function PostCard({
     // Helper to check if user has voted on this post
     const hasVotedOnPost = votedOptions.size > 0;
 
+    // Helper to check if user has already suggested for this post
+    const { address } = useAccount();
+    const viewerId = isWalletConnected ? address : undefined;
+    console.log('PostCard viewerId:', viewerId, 'isWalletConnected:', isWalletConnected, 'postId:', id);
+    const { postRef, views, isAnimating, recordView } = usePostView({
+        postId: id,
+        viewerId,
+        initialViews: totalViews,
+    });
+    const hasSuggested = isWalletConnected && nameOptions.some(opt => opt.author === address);
+
     const handleVoteClick = (optionId: string) => {
         if (!isWalletConnected) return;
         if (hasVotedOnPost) {
@@ -69,15 +82,6 @@ export default function PostCard({
         setShowVoteConfirm(optionId);
         setVoteError(null);
     };
-
-    const { address } = useAccount();
-    const viewerId = isWalletConnected ? address : undefined;
-    console.log('PostCard viewerId:', viewerId, 'isWalletConnected:', isWalletConnected, 'postId:', id);
-    const { postRef, views, isAnimating, recordView } = usePostView({
-        postId: id,
-        viewerId,
-        initialViews: totalViews,
-    });
 
     const confirmVote = (optionId: string) => {
         if (!isWalletConnected) return;
@@ -94,16 +98,38 @@ export default function PostCard({
 
     const handleAddNameClick = () => {
         if (!isWalletConnected || nameOptions.length >= 5) return;
+        if (hasSuggested) {
+            setAddNameError('You have already suggested a name for this post. Only one suggestion per user is allowed.');
+            return;
+        }
         setShowAddName(true);
+        setAddNameError(null);
     };
 
     const handleAddNameSubmit = () => {
         if (!isWalletConnected || !newNameInput.trim()) return;
-
-        onAddName?.(newNameInput.trim());
-        setNewNameInput('');
-        setShowAddName(false);
-        recordView(true); // Count as view on add name
+        if (hasSuggested) {
+            setAddNameError('You have already suggested a name for this post. Only one suggestion per user is allowed.');
+            return;
+        }
+        if (nameOptions.length >= 5) {
+            setAddNameError('This post already has the maximum of 5 suggestions.');
+            return;
+        }
+        onAddName?.(newNameInput.trim(), (msg) => {
+            if (msg) {
+                setAddNameError(msg);
+            } else {
+                setAddNameSuccess(true);
+                setTimeout(() => {
+                    setAddNameSuccess(false);
+                    setNewNameInput('');
+                    setShowAddName(false);
+                    setAddNameError(null);
+                    recordView(true); // Count as view on add name
+                }, 1000);
+            }
+        });
     };
 
     const cancelAddName = () => {
@@ -152,15 +178,15 @@ export default function PostCard({
                 )}
 
                 {/* Image */}
-                    <Image
-                        src={image}
-                        alt="Post content"
-                        width={600}
-                        height={192}
-                        className="w-full h-48 object-cover rounded-lg"
-                        style={{ objectFit: 'cover', borderRadius: '0.5rem' }}
-                        priority
-                    />
+                <Image
+                    src={image}
+                    alt="Post content"
+                    width={600}
+                    height={192}
+                    className="w-full h-48 object-cover rounded-lg"
+                    style={{ objectFit: 'cover', borderRadius: '0.5rem' }}
+                    priority
+                />
 
                 {/* Description */}
                 <div className="mb-4">
@@ -186,10 +212,10 @@ export default function PostCard({
                         onClick={handleAddNameClick}
                         disabled={!isWalletConnected || nameOptions.length >= 5}
                         className={`flex items-center text-sm transition-colors ${!isWalletConnected
-                                ? 'text-[#FBE2A7]/30 cursor-not-allowed'
-                                : nameOptions.length >= 5
-                                    ? 'text-[#FBE2A7]/50 cursor-not-allowed'
-                                    : 'text-[#E4A2B1] hover:text-[#F3E3EA] cursor-pointer'
+                            ? 'text-[#FBE2A7]/30 cursor-not-allowed'
+                            : nameOptions.length >= 5
+                                ? 'text-[#FBE2A7]/50 cursor-not-allowed'
+                                : 'text-[#E4A2B1] hover:text-[#F3E3EA] cursor-pointer'
                             }`}
                         title={!isWalletConnected ? 'Connect wallet to add names' : undefined}
                     >
@@ -237,10 +263,10 @@ export default function PostCard({
                                         onClick={() => handleVoteClick(option.id)}
                                         disabled={!isWalletConnected || hasVoted}
                                         className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${!isWalletConnected
-                                                ? 'bg-[#324859] border border-[#324859] text-[#FBE2A7]/50 cursor-not-allowed'
-                                                : hasVoted
-                                                    ? 'bg-[#FBE2A7]/20 border border-[#FBE2A7] text-[#FBE2A7] cursor-not-allowed'
-                                                    : 'bg-[#E4A2B1]/20 text-[#E4A2B1] hover:bg-[#E4A2B1] border border-[#E4A2B1] hover:text-[#12242E] cursor-pointer'
+                                            ? 'bg-[#324859] border border-[#324859] text-[#FBE2A7]/50 cursor-not-allowed'
+                                            : hasVoted
+                                                ? 'bg-[#FBE2A7]/20 border border-[#FBE2A7] text-[#FBE2A7] cursor-not-allowed'
+                                                : 'bg-[#E4A2B1]/20 text-[#E4A2B1] hover:bg-[#E4A2B1] border border-[#E4A2B1] hover:text-[#12242E] cursor-pointer'
                                             }`}
                                         title={!isWalletConnected ? 'Connect wallet to vote' : undefined}
                                     >
@@ -280,6 +306,12 @@ export default function PostCard({
                             </button>
                         </div>
 
+                        {addNameError && (
+                            <div className="mb-2 text-[#E4A2B1] text-xs font-medium">
+                                {addNameError}
+                            </div>
+                        )}
+
                         <div className="mb-6">
                             <label className="block text-[#F3E3EA] text-sm font-medium mb-2">
                                 Your name suggestion
@@ -313,13 +345,13 @@ export default function PostCard({
                             </button>
                             <button
                                 onClick={handleAddNameSubmit}
-                                disabled={!newNameInput.trim()}
-                                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${!newNameInput.trim()
-                                        ? 'bg-[#324859] text-[#FBE2A7]/50 cursor-not-allowed'
-                                        : 'bg-[#E4A2B1] text-[#12242E] hover:bg-[#e29cad]'
-                                    }`}
+                                disabled={!newNameInput.trim() || addNameSuccess}
+                                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center ${!newNameInput.trim() || addNameSuccess
+                                    ? 'bg-[#324859] text-[#FBE2A7]/50 cursor-not-allowed'
+                                    : 'bg-[#E4A2B1] text-[#12242E] hover:bg-[#e29cad]'
+                                } ${addNameSuccess ? 'animate-success' : ''}`}
                             >
-                                Add Name
+                                {addNameSuccess ? <><Check size={18} className="mr-1" /> Success!</> : 'Add Name'}
                             </button>
                         </div>
                     </div>
@@ -381,12 +413,16 @@ export default function PostCard({
 }
 
 /* Add this to your global CSS (e.g., app/globals.css):
-.view-count-animate {
-  animation: pop-scale 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+.animate-success {
+  animation: pop-scale-green 1s cubic-bezier(0.4, 0, 0.2, 1);
+  background: #21B65F !important;
+  color: #12242E !important;
+  border: 1px solid #21B65F !important;
 }
-@keyframes pop-scale {
+@keyframes pop-scale-green {
   0% { transform: scale(1); }
-  20% { transform: scale(1.3); color: #FBE2A7; }
+  20% { transform: scale(1.15); }
+  60% { background: #21B65F; color: #12242E; }
   100% { transform: scale(1); }
 }
 */

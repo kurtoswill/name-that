@@ -13,15 +13,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(user);
   }
 
-  // Create new user
-  const newUser = await db.user.create({
-    data: {
-      id,
-      username: username || `User${id.slice(-6)}`,
-      profile: profile || null,
-    },
-  });
-  return NextResponse.json(newUser);
+  // Create new user, handle unique constraint error
+  try {
+    const newUser = await db.user.create({
+      data: {
+        id,
+        username: username || `User${id.slice(-6)}`,
+        profile: profile || null,
+      },
+    });
+    return NextResponse.json(newUser);
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      // Unique constraint failed, return existing user
+      const existingUser = await db.user.findUnique({ where: { id } });
+      return NextResponse.json(existingUser);
+    }
+    throw error;
+  }
 }
 
 export async function GET(req: NextRequest) {

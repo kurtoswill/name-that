@@ -31,9 +31,15 @@ export async function POST(request: NextRequest) {
     if (!post || post.deleted) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
 
     await db.user.upsert({ where: { id: author }, update: {}, create: { id: author } });
-    const suggestion = await db.suggestion.create({ data: { postId, author, text: text.trim() } });
-
-    return NextResponse.json({ suggestion }, { status: 201 })
+    try {
+      const suggestion = await db.suggestion.create({ data: { postId, author, text: text.trim() } });
+      return NextResponse.json({ suggestion }, { status: 201 })
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        return NextResponse.json({ error: 'You have already suggested a name for this post.' }, { status: 409 });
+      }
+      throw error;
+    }
   } catch (error) {
     console.error('Error creating suggestion:', error)
     return NextResponse.json(

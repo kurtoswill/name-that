@@ -116,18 +116,23 @@ export default function HomePage() {
         }
     };
 
-    const handleAddName = async (postId: string, newName: string) => {
+    const handleAddName = async (postId: string, newName: string, setAddNameError: (msg: string) => void) => {
         if (!address) return;
         // Record view when adding suggestion
         await recordView(postId);
-        await fetch('/api/suggestions', {
+        const res = await fetch('/api/suggestions', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ postId, author: address, text: newName })
         });
+        if (res.status === 409) {
+            setAddNameError('You have already suggested a name for this post. Only one suggestion per user is allowed.');
+            return;
+        }
         // refresh suggestions
         const sr = await fetch(`/api/suggestions?postId=${postId}`);
         const sj = await sr.json();
         setSuggestionsByPost(prev => ({ ...prev, [postId]: sj.suggestions || [] }));
+        setAddNameError(''); // Success: trigger modal close in PostCard
     };
 
     const handleVote = async (postId: string, optionId: string) => {
@@ -300,7 +305,7 @@ export default function HomePage() {
                                 totalVotes={post._count?.votes || 0}
                                 totalPrize={parseFloat(post.prizeEth)}
                                 isWalletConnected={isConnected}
-                                onAddName={(newName) => handleAddName(post.id, newName)}
+                                onAddName={(newName, setAddNameError) => handleAddName(post.id, newName, setAddNameError)}
                                 onVote={(optionId) => handleVote(post.id, optionId)}
                             />
                         );

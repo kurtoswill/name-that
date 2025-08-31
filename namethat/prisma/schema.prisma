@@ -44,6 +44,8 @@ model Post {
 }
 
 model Suggestion {
+  // Ensure one suggestion per user per post
+  @@unique([postId, author], name: "postId_author")
   id        String   @id @default(cuid())
   postId    String
   author    String   // wallet address
@@ -56,6 +58,7 @@ model Suggestion {
   votes     Vote[]
   winnerOfPost Post[] @relation("WinnerSuggestion")
 
+  // TEMP: Allow multiple suggestions per user per post for testing
   @@map("suggestions")
 }
 
