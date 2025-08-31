@@ -6,8 +6,9 @@ import { ConnectWallet } from '@coinbase/onchainkit/wallet';
 import PostCard from '@/app/components/PostCard';
 import Image from 'next/image';
 
-interface ApiPost { id: string; creator: string; title: string; description: string; imageUrl?: string | null; createdAt: string; prizeEth: string; usdAtCreation: string; _count?: { votes: number; suggestions: number } }
-interface ApiSuggestion { id: string; postId: string; author: string; text: string }
+
+interface ApiPost { id: string; creator: string; title: string; description: string; imageUrl?: string | null; createdAt: string; prizeEth: string; usdAtCreation: string; _count?: { votes: number; suggestions: number; views: number } }
+interface ApiSuggestion { id: string; postId: string; author: string; text: string; votes?: number }
 
 export default function HomePage() {
     const { address, isConnected } = useAccount();
@@ -15,86 +16,54 @@ export default function HomePage() {
 
     const [username, setUsername] = useState('');
     const [posts, setPosts] = useState<ApiPost[]>([]);
-    const [suggestionsByPost, setSuggestionsByPost] = useState<Record<string, ApiSuggestion[]>>({});
+    const [suggestionsByPost, setSuggestionsByPost] = useState<Record<string, ApiSuggestion>>({});
+    
+    // Use polling hook to get real-time view updates
+
     const [user, setUser] = useState<any>(null);
 
-    // Sample post data for demonstration
-    const samplePosts = [
-        {
-            id: '1',
-            author: 'Kazel Tuazon',
-            timeAgo: '2h ago',
-            image: '/placeholder.jpg',
-            description: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-            nameOptions: [
-                { id: '1', name: 'Frieren', author: '@kzlrwnjne', ethReward: '0.001 ETH', voteCount: '25k' },
-                { id: '2', name: 'Frieren', author: '@kzlrwnjne', ethReward: '0.001 ETH', voteCount: '25k', hasVoted: true },
-                { id: '3', name: 'Frieren', author: '@kzlrwnjne', ethReward: '0.001 ETH', voteCount: '25k' }
-            ],
-            totalViews: 1200,
-            totalVotes: 75000
-        },
-        {
-            id: '2',
-            author: '@animefan2024',
-            timeAgo: '4h ago',
-            image: '/placeholder.jpg',
-            description: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.',
-            nameOptions: [
-                { id: '4', name: 'Aria', author: '@animefan2024', ethReward: '0.002 ETH', voteCount: '18k' },
-                { id: '5', name: 'Luna', author: '@otakulover', ethReward: '0.002 ETH', voteCount: '32k', hasVoted: true }
-            ],
-            totalViews: 856,
-            totalVotes: 50000
-        },
-        {
-            id: '3',
-            author: '@mangareader',
-            timeAgo: '6h ago',
-            image: '/placeholder.jpg',
-            description: 'At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.',
-            nameOptions: [
-                { id: '6', name: 'Seraphina', author: '@mangareader', ethReward: '0.003 ETH', voteCount: '42k' },
-                { id: '7', name: 'Nova', author: '@animeexpert', ethReward: '0.001 ETH', voteCount: '28k' },
-                { id: '8', name: 'Celestia', author: '@otakumaster', ethReward: '0.002 ETH', voteCount: '55k', hasVoted: true },
-                { id: '9', name: 'Aurora', author: '@weeblife', ethReward: '0.002 ETH', voteCount: '19k' }
-            ],
-            totalViews: 2100,
-            totalVotes: 144000
-        },
-        {
-            id: '4',
-            author: '@cosplayqueen',
-            timeAgo: '8h ago',
-            image: '/placeholder.jpg',
-            description: 'Temporibus autem quibusdam et aut officiis debitis aut rerum necessitatibus saepe eveniet ut et voluptates repudiandae sint et molestiae non recusandae. Itaque earum rerum hic tenetur a sapiente delectus.',
-            nameOptions: [
-                { id: '10', name: 'Shadow', author: '@cosplayqueen', ethReward: '0.005 ETH', voteCount: '67k' },
-                { id: '11', name: 'Kage', author: '@ninjafan', ethReward: '0.002 ETH', voteCount: '34k' },
-                { id: '12', name: 'Raven', author: '@stealthmaster', ethReward: '0.003 ETH', voteCount: '89k', hasVoted: true }
-            ],
-            totalViews: 3700,
-            totalVotes: 190000
-        }
-    ];
+    const [usernames, setUsernames] = useState<Record<string, string>>({});
 
     useEffect(() => {
         const load = async () => {
+            // Fetch posts
             const res = await fetch('/api/posts');
             const json = await res.json();
             const items: ApiPost[] = json.posts || [];
             setPosts(items);
-            // fetch suggestions for each post (lightweight)
+
+            // Fetch suggestions for each post
             const dict: Record<string, ApiSuggestion[]> = {};
+
             await Promise.all(items.map(async (p) => {
-                const sr = await fetch(`/api/suggestions?postId=${p.id}`);
-                const sj = await sr.json();
+                const srRes = await fetch(`/api/suggestions?postId=${p.id}`);
+                const sj = await srRes.json();
                 dict[p.id] = sj.suggestions || [];
             }));
+            
             setSuggestionsByPost(dict);
+
+            // Fetch usernames for post creators and suggestion authors
+            const uniqueAddresses = new Set<string>();
+            items.forEach(post => uniqueAddresses.add(post.creator));
+            Object.values(dict).flat().forEach(s => uniqueAddresses.add(s.author));
+
+            const usernameDict: Record<string, string> = {};
+            await Promise.all([...uniqueAddresses].map(async (address) => {
+                const ur = await fetch('/api/user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: address })
+                });
+                if (ur.ok) {
+                    const userData = await ur.json();
+                    usernameDict[address] = userData.username || `User${address.slice(-6)}`;
+                }
+            }));
+            setUsernames(usernameDict);
         };
         load();
-    }, []);
+    }, []); // Only run on initial load
 
     useEffect(() => {
     const syncUser = async () => {
@@ -119,8 +88,38 @@ export default function HomePage() {
     }
 }, [isConnected, address]);
 
+
+    // Record a view and update the UI with the new view count
+    const recordView = async (postId: string) => {
+        if (!address) return;
+        await fetch('/api/views', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postId, viewerId: address })
+        });
+        // Fetch the new view count and update the posts state
+        const res = await fetch(`/api/views?postId=${postId}`);
+        const data = await res.json();
+        if (typeof data.views === 'number') {
+            setPosts(prevPosts => prevPosts.map(post =>
+                post.id === postId
+                    ? {
+                        ...post,
+                        _count: {
+                            votes: post._count?.votes ?? 0,
+                            suggestions: post._count?.suggestions ?? 0,
+                            views: data.views
+                        }
+                    }
+                    : post
+            ));
+        }
+    };
+
     const handleAddName = async (postId: string, newName: string) => {
         if (!address) return;
+        // Record view when adding suggestion
+        await recordView(postId);
         await fetch('/api/suggestions', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ postId, author: address, text: newName })
@@ -133,6 +132,8 @@ export default function HomePage() {
 
     const handleVote = async (postId: string, optionId: string) => {
         if (!address) return;
+        // Record view when voting
+        await recordView(postId);
         await fetch('/api/votes', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ postId, suggestionId: optionId, voter: address })
@@ -141,8 +142,26 @@ export default function HomePage() {
 
     const timeAgo = (d: string) => {
         const diff = Date.now() - new Date(d).getTime();
-        const h = Math.max(1, Math.floor(diff / (1000 * 60 * 60)));
-        return `${h}h ago`;
+        const minutes = Math.floor(diff / (1000 * 60));
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        const weeks = Math.floor(days / 7);
+        const months = Math.floor(days / 30);
+        const years = Math.floor(days / 365);
+
+        if (years > 0) {
+            return `${years}y ago`;
+        } else if (months > 0) {
+            return `${months}mo ago`;
+        } else if (weeks > 0) {
+            return `${weeks}w ago`;
+        } else if (days > 0) {
+            return `${days}d ago`;
+        } else if (hours > 0) {
+            return `${hours}h ago`;
+        } else {
+            return `${Math.max(1, minutes)}m ago`;
+        }
     };
 
     return (
@@ -256,24 +275,36 @@ export default function HomePage() {
             </div>
 
             {/* Posts Section */}
-            <div className="relative z-0 p-4 pb-24 mt-8">
+            <div className="relative z-0 p-4 pb-32 mt-8">
                 <div className="max-w-4xl mx-auto space-y-6">
-                    {samplePosts.map((post) => (
-                        <PostCard
-                            key={post.id}
-                            id={post.id}
-                            author={post.author}
-                            timeAgo={post.timeAgo}
-                            image={post.image}
-                            description={post.description}
-                            nameOptions={post.nameOptions}
-                            totalViews={post.totalViews}
-                            totalVotes={post.totalVotes}
-                            isWalletConnected={isConnected}
-                            onAddName={(newName) => handleAddName(post.id, newName)}
-                            onVote={(optionId) => handleVote(post.id, optionId)}
-                        />
-                    ))}
+                    {posts.map((post) => {
+                        const suggestions = suggestionsByPost[post.id] || [];
+                        const nameOptions = suggestions.map(s => ({
+                            id: s.id,
+                            name: s.text,
+                            author: usernames[s.author] || s.author,
+                            ethReward: post.prizeEth + ' ETH',
+                            voteCount: s.votes?.toString() || '0'
+                        }));
+                        
+                        return (
+                            <PostCard
+                                key={post.id}
+                                id={post.id}
+                                author={usernames[post.creator] || post.creator}
+                                timeAgo={timeAgo(post.createdAt)}
+                                image={post.imageUrl || '/placeholder.jpg'}
+                                description={post.description}
+                                nameOptions={nameOptions}
+                                totalViews={post._count?.views ?? 0}
+                                totalVotes={post._count?.votes || 0}
+                                totalPrize={parseFloat(post.prizeEth)}
+                                isWalletConnected={isConnected}
+                                onAddName={(newName) => handleAddName(post.id, newName)}
+                                onVote={(optionId) => handleVote(post.id, optionId)}
+                            />
+                        );
+                    })}
                 </div>
             </div>
         </div>

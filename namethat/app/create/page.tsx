@@ -1,12 +1,11 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Wallet, X, FileImage, FileVideo, Music } from 'lucide-react';
+import { ArrowLeft, Plus, X, FileImage, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import { useAccount, useConnect } from 'wagmi';
-import { ConnectWallet, Wallet as OnchainWallet } from '@coinbase/onchainkit/wallet';
+import Image from 'next/image';
+import { useAccount } from 'wagmi';
+import { ConnectWallet } from '@coinbase/onchainkit/wallet';
 
 export default function CreatePage() {
     const [title, setTitle] = useState('');
@@ -16,6 +15,9 @@ export default function CreatePage() {
     const [uploadedFile, setUploadedFile] = useState<File | null>(null);
     const [ethToUsdRate, setEthToUsdRate] = useState(4630); // Default rate
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+    const [isLoading, setIsLoading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState<number>(0);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     const { address, isConnected } = useAccount();
 
@@ -67,7 +69,7 @@ export default function CreatePage() {
         }
     };
 
-    const getFileIcon = (file: File) => {
+    const getFileIcon = () => {
         return <FileImage size={20} className="text-[#E4A2B1]" />;
     };
 
@@ -80,54 +82,79 @@ export default function CreatePage() {
     };
 
     const handlePost = async () => {
-        if (!isConnected) {
-            alert('Please connect your wallet to post');
-            return;
-        }
-        if (!title || !description) {
-            alert('Please fill in all required fields');
-            return;
-        }
-        // Enforce $1 minimum based on current rate
-        if (parseFloat(usdPrize) < 1) {
-            alert('Minimum prize is $1 USD equivalent. Please increase the ETH amount.');
-            return;
-        }
-
         try {
+            setErrorMessage(null);
+            
+            if (!isConnected) {
+                setErrorMessage('Please connect your wallet to post');
+                return;
+            }
+            if (!title || !description) {
+                setErrorMessage('Please fill in all required fields');
+                return;
+            }
+            if (parseFloat(usdPrize) < 1) {
+                setErrorMessage('Minimum prize is $1 USD equivalent. Please increase the ETH amount.');
+                return;
+            }
+
+            setIsLoading(true);
+            
+            // First, upload image if provided
             let imageUrl: string | undefined = undefined;
             if (uploadedFile) {
                 const formData = new FormData();
                 formData.append('file', uploadedFile);
-                const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
-                const uploadJson = await uploadRes.json();
+
+                setUploadProgress(20);
+                const uploadRes = await fetch('/api/upload', { 
+                    method: 'POST', 
+                    body: formData 
+                });
+                
                 if (!uploadRes.ok) {
+                    const uploadJson = await uploadRes.json();
                     throw new Error(uploadJson.error || 'Image upload failed');
                 }
-                imageUrl = uploadJson.url;
+
+                const uploadData = await uploadRes.json();
+                imageUrl = uploadData.secure_url || uploadData.url;
+                setUploadProgress(50);
             }
 
-            const res = await fetch('/api/posts', {
+            // Then create the post
+            const postRes = await fetch('/api/posts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    title,
-                    description,
+                    title: title.trim(),
+                    description: description.trim(),
                     imageUrl,
                     prizeEth: parseFloat(ethPrize),
                     creator: address,
                 }),
             });
-            const json = await res.json();
-            if (!res.ok) {
-                throw new Error(json.error || 'Failed to create post');
+
+            if (!postRes.ok) {
+                const errorData = await postRes.json();
+                throw new Error(errorData.error || 'Failed to create post');
             }
-            alert('Post created!');
-            // Optionally redirect
+
+            setUploadProgress(100);
+
+            // TODO: Here we'll need to:
+            // 1. Create smart contract for prize pool escrow
+            // 2. Transfer ETH from user's wallet to the escrow contract
+            // 3. Store contract address and transaction hash in the database
+            // 4. Set up event listeners for winner selection and prize distribution
+
             window.location.href = '/';
         } catch (error) {
-            console.error('Failed to post:', error);
-            alert((error as Error).message || 'Failed to create post. Please try again.');
+            console.error('Failed to create post:', error);
+            setErrorMessage((error as Error).message || 'Failed to create post. Please try again.');
+        } finally {
+            setIsLoading(false);
+            setUploadProgress(0);
         }
     };
 
@@ -204,7 +231,7 @@ export default function CreatePage() {
                     ) : (
                         <div className="bg-[#20333D] border border-[#324859] rounded-lg p-3 flex items-center justify-between">
                             <div className="flex items-center space-x-3">
-                                {getFileIcon(uploadedFile)}
+                                {getFileIcon()}
                                 <div>
                                     <p className="text-[#F3E3EA] text-sm truncate max-w-48">{uploadedFile.name}</p>
                                     <p className="text-[#E4A2B1]/70 text-xs">{formatFileSize(uploadedFile.size)}</p>
@@ -212,12 +239,27 @@ export default function CreatePage() {
                             </div>
                             <div className="flex items-center gap-3">
                                 {uploadedFile && (
-                                  // Preview
-                                  <img src={URL.createObjectURL(uploadedFile)} alt="preview" className="w-16 h-16 object-cover rounded-md border border-[#324859]" />
+                                    <div className="relative w-16 h-16">
+                                        {isLoading ? (
+                                            <div className="absolute inset-0 flex items-center justify-center bg-[#20333D]/80 rounded-md border border-[#324859]">
+                                                <Loader2 className="w-5 h-5 animate-spin text-[#E4A2B1]" />
+                                            </div>
+                                        ) : (
+                                            <Image 
+                                                src={URL.createObjectURL(uploadedFile)} 
+                                                alt="preview" 
+                                                fill
+                                                className="object-cover rounded-md border border-[#324859]"
+                                            />
+                                        )}
+                                    </div>
                                 )}
                                 <button
                                     onClick={handleRemoveFile}
-                                    className="text-[#E4A2B1] hover:text-[#F3E3EA] transition-colors p-1"
+                                    disabled={isLoading}
+                                    className={`text-[#E4A2B1] transition-colors p-1 ${
+                                        isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:text-[#F3E3EA]'
+                                    }`}
                                 >
                                     <X size={16} />
                                 </button>
@@ -272,19 +314,42 @@ export default function CreatePage() {
                 </div>
             </div>
 
-            {/* Post Button */}
-            <div className="mt-8">
+            {/* Post Button and Error Message */}
+            <div className="mt-8 space-y-4">
+                {errorMessage && (
+                    <div className="flex items-center gap-2 text-red-400 bg-red-400/10 p-3 rounded-lg text-sm">
+                        <AlertCircle className="w-4 h-4" />
+                        <p>{errorMessage}</p>
+                    </div>
+                )}
+                
                 <button
                     onClick={handlePost}
-                    disabled={!isConnected}
-                    className={`w-full py-2 rounded-lg text-lg font-medium transition-colors ${
-                        isConnected
+                    disabled={!isConnected || isLoading}
+                    className={`w-full py-2 rounded-lg text-lg font-medium transition-colors relative ${
+                        isConnected && !isLoading
                             ? 'bg-[#FBE2A7] text-[#12242E] hover:bg-[#F5D982]'
                             : 'bg-[#324859] text-[#FBE2A7]/50 cursor-not-allowed'
                     }`}
                 >
-                    Post
+                    {isLoading ? (
+                        <div className="flex items-center justify-center gap-2">
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            {uploadProgress > 0 ? `Uploading... ${uploadProgress}%` : 'Creating Post...'}
+                        </div>
+                    ) : (
+                        'Post'
+                    )}
                 </button>
+
+                {isLoading && uploadProgress > 0 && (
+                    <div className="w-full bg-[#324859] rounded-full h-1 mt-2">
+                        <div 
+                            className="bg-[#FBE2A7] h-1 rounded-full transition-all duration-300" 
+                            style={{ width: `${uploadProgress}%` }}
+                        />
+                    </div>
+                )}
             </div>
         </div>
     );

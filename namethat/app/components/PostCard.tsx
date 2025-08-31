@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Eye, X } from 'lucide-react';
+import Image from 'next/image';
+import { usePostView } from '../hooks/usePostView';
+import { useAccount } from 'wagmi';
 
 interface NameOption {
     id: string;
@@ -43,6 +46,7 @@ export default function PostCard({
     const [showVoteConfirm, setShowVoteConfirm] = useState<string | null>(null);
     const [showAddName, setShowAddName] = useState(false);
     const [newNameInput, setNewNameInput] = useState('');
+    const [voteError, setVoteError] = useState<string | null>(null);
 
     // Calculate prize distribution (80% after 20% platform fee)
     const prizeAfterFees = totalPrize ? totalPrize * 0.8 : 0;
@@ -53,16 +57,35 @@ export default function PostCard({
         return text.substring(0, maxLength) + '...';
     };
 
+    // Helper to check if user has voted on this post
+    const hasVotedOnPost = votedOptions.size > 0;
+
     const handleVoteClick = (optionId: string) => {
-        if (!isWalletConnected || votedOptions.has(optionId)) return;
+        if (!isWalletConnected) return;
+        if (hasVotedOnPost) {
+            setVoteError('You have already voted on this post. Only one vote per post is allowed.');
+            return;
+        }
         setShowVoteConfirm(optionId);
+        setVoteError(null);
     };
+
+    const { address } = useAccount();
+    const viewerId = isWalletConnected ? address : undefined;
+    console.log('PostCard viewerId:', viewerId, 'isWalletConnected:', isWalletConnected, 'postId:', id);
+    const { postRef, views, isAnimating, recordView } = usePostView({
+        postId: id,
+        viewerId,
+        initialViews: totalViews,
+    });
 
     const confirmVote = (optionId: string) => {
         if (!isWalletConnected) return;
         setVotedOptions(prev => new Set(prev).add(optionId));
         setShowVoteConfirm(null);
         onVote?.(optionId);
+        recordView(true); // Count as view on vote
+        setVoteError(null);
     };
 
     const cancelVote = () => {
@@ -80,6 +103,7 @@ export default function PostCard({
         onAddName?.(newNameInput.trim());
         setNewNameInput('');
         setShowAddName(false);
+        recordView(true); // Count as view on add name
     };
 
     const cancelAddName = () => {
@@ -89,7 +113,7 @@ export default function PostCard({
 
     return (
         <>
-            <div className="bg-[#20333D] rounded-xl p-4 mb-4 border border-[#324859]/50">
+            <div ref={postRef} className="bg-[#20333D] rounded-xl p-4 mb-4 border border-[#324859]/50">
                 {/* Header */}
                 <div className="flex items-center mb-3">
                     <div className="w-8 h-8 bg-[#E4A2B1] rounded-full flex items-center justify-center mr-3">
@@ -128,13 +152,15 @@ export default function PostCard({
                 )}
 
                 {/* Image */}
-                <div className="mb-4">
-                    <img
+                    <Image
                         src={image}
                         alt="Post content"
+                        width={600}
+                        height={192}
                         className="w-full h-48 object-cover rounded-lg"
+                        style={{ objectFit: 'cover', borderRadius: '0.5rem' }}
+                        priority
                     />
-                </div>
 
                 {/* Description */}
                 <div className="mb-4">
@@ -176,6 +202,11 @@ export default function PostCard({
                         }
                     </button>
                 </div>
+                {voteError && (
+                    <div className="mb-2 text-[#E4A2B1] text-xs font-medium">
+                        {voteError}
+                    </div>
+                )}
 
                 {/* Name Options List */}
                 <div className="space-y-2 mb-4">
@@ -225,7 +256,9 @@ export default function PostCard({
                 <div className="flex justify-between items-center text-xs text-[#FBE2A7]/70 pt-2 border-t border-[#324859]/30">
                     <div className="flex items-center">
                         <Eye size={14} className="mr-1" />
-                        {totalViews.toLocaleString()} views
+                        <span className={isAnimating ? 'view-count-animate' : ''}>
+                            {views.toLocaleString()} views
+                        </span>
                     </div>
                     <div>
                         {totalVotes.toLocaleString()} total votes
@@ -314,10 +347,14 @@ export default function PostCard({
                                     {nameOptions.find(opt => opt.id === showVoteConfirm)?.name}
                                 </span>
                             </p>
+                            <p className="text-[#FBE2A7]/80 text-xs mb-3">
+                                Suggested by: <span className="font-semibold text-[#FBE2A7]">
+                                    {nameOptions.find(opt => opt.id === showVoteConfirm)?.author}
+                                </span>
+                            </p>
                             <div className="bg-[#324859] p-3 rounded-lg">
                                 <p className="text-[#FBE2A7] text-xs leading-relaxed">
-                                    ⚠️ Once you vote, you cannot change or remove your vote.
-                                    This action is permanent and will cost 0.0001 ETH.
+                                    ⚠️ Once you vote, you cannot change or remove your vote. You will also not be able to cast another vote on this post. This action is permanent and will cost 0.0001 ETH.
                                 </p>
                             </div>
                         </div>
@@ -342,3 +379,14 @@ export default function PostCard({
         </>
     );
 }
+
+/* Add this to your global CSS (e.g., app/globals.css):
+.view-count-animate {
+  animation: pop-scale 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes pop-scale {
+  0% { transform: scale(1); }
+  20% { transform: scale(1.3); color: #FBE2A7; }
+  100% { transform: scale(1); }
+}
+*/

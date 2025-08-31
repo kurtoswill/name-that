@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     const cloudForm = new FormData();
     cloudForm.append("file", file);
 
-    let uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
 
     if (UPLOAD_PRESET) {
       cloudForm.append("upload_preset", UPLOAD_PRESET);

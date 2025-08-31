@@ -16,6 +16,7 @@ model User {
   posts       Post[]
   suggestions Suggestion[]
   votes       Vote[]
+  views       View[]
 
   @@map("users")
 }
@@ -36,6 +37,7 @@ model Post {
   user        User         @relation(fields: [creator], references: [id])
   suggestions Suggestion[]
   votes       Vote[]
+  views       View[]
   winnerSuggestion Suggestion? @relation("WinnerSuggestion", fields: [winnerSuggestionId], references: [id])
 
   @@map("posts")
@@ -72,4 +74,19 @@ model Vote {
   // Ensure one vote per voter per post
   @@unique([voter, postId])
   @@map("votes")
+}
+
+model View {
+  id        String   @id @default(cuid())
+  postId    String
+  viewerId  String   // wallet address
+  createdAt DateTime @default(now())
+
+  // Relations
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [viewerId], references: [id])
+
+  // Ensure one view per user per post ever
+  @@unique([postId, viewerId], name: "postId_viewerId")
+  @@map("views")
 }
