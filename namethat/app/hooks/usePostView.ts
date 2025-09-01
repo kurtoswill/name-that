@@ -16,7 +16,7 @@ export function usePostView({ postId, viewerId, initialViews, viewThreshold = 50
     const isViewingRef = useRef(false);
     const startTimeRef = useRef<number>(0);
 
-    // Expose recordView for imperative use (vote/add name)
+    // Always fetch view count, only record view if viewerId is present
     const recordView = useCallback(async (force = false) => {
         if (hasViewedRef.current) return;
         if (!force) {
@@ -24,26 +24,30 @@ export function usePostView({ postId, viewerId, initialViews, viewThreshold = 50
             if (timeViewing < viewThreshold) return;
         }
         try {
-            const res = await fetch('/api/views', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ postId, viewerId })
-            });
-            if (res.ok) {
-                const getRes = await fetch(`/api/views?postId=${postId}`);
-                const getData = await getRes.json();
-                hasViewedRef.current = true;
-                setIsAnimating(true);
-                setViews(getData.views);
-                setTimeout(() => setIsAnimating(false), 600);
+            // Only record a view if viewerId is present (wallet connected)
+            if (viewerId) {
+                const res = await fetch('/api/views', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ postId, viewerId })
+                });
+                if (res.ok) {
+                    hasViewedRef.current = true;
+                }
             }
+            // Always fetch the latest view count
+            const getRes = await fetch(`/api/views?postId=${postId}`);
+            const getData = await getRes.json();
+            setIsAnimating(true);
+            setViews(getData.views);
+            setTimeout(() => setIsAnimating(false), 600);
         } catch (error) {
-            console.error('Error recording view:', error);
+            console.error('Error recording/fetching view:', error);
         }
     }, [postId, viewerId, viewThreshold]);
 
     useEffect(() => {
-        if (!postRef.current || !viewerId) return;
+        if (!postRef.current) return;
 
         // Create an intersection observer with lower threshold for better detection
         const observer = new IntersectionObserver(

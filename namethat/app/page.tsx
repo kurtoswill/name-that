@@ -21,9 +21,12 @@ export default function HomePage() {
     const [user, setUser] = useState<any>(null);
     const [usernames, setUsernames] = useState<Record<string, string>>({});
     const [userVotes, setUserVotes] = useState<Record<string, string>>({}); // postId -> suggestionId
+    const [loadingPosts, setLoadingPosts] = useState(true);
 
+    // Always fetch posts, suggestions, and usernames on load
     useEffect(() => {
         const load = async () => {
+            setLoadingPosts(true);
             // Fetch posts
             const res = await fetch('/api/posts');
             const json = await res.json();
@@ -57,23 +60,28 @@ export default function HomePage() {
                 }
             }));
             setUsernames(usernameDict);
-
-            // Fetch user's votes for all posts (if connected)
-            if (address) {
-                const votesRes = await fetch(`/api/votes?voter=${address}`);
-                if (votesRes.ok) {
-                    const votesJson = await votesRes.json();
-                    // votes: [{ postId, suggestionId, ... }]
-                    const voteMap: Record<string, string> = {};
-                    (votesJson.votes || []).forEach((v: any) => {
-                        if (v.postId && v.suggestionId) voteMap[v.postId] = v.suggestionId;
-                    });
-                    setUserVotes(voteMap);
-                }
-            }
+            setLoadingPosts(false);
         };
         load();
-    }, [address]); // re-run if address changes
+    }, []); // Only run on initial load
+
+    // Fetch user votes only when wallet is connected
+    useEffect(() => {
+        if (!isConnected || !address) return;
+        const fetchVotes = async () => {
+            const votesRes = await fetch(`/api/votes?voter=${address}`);
+            if (votesRes.ok) {
+                const votesJson = await votesRes.json();
+                // votes: [{ postId, suggestionId, ... }]
+                const voteMap: Record<string, string> = {};
+                (votesJson.votes || []).forEach((v: any) => {
+                    if (v.postId && v.suggestionId) voteMap[v.postId] = v.suggestionId;
+                });
+                setUserVotes(voteMap);
+            }
+        };
+        fetchVotes();
+    }, [isConnected, address]);
 
     useEffect(() => {
     const syncUser = async () => {
@@ -292,35 +300,45 @@ export default function HomePage() {
             {/* Posts Section */}
             <div className="relative z-0 p-4 pb-32 mt-8">
                 <div className="max-w-4xl mx-auto space-y-6">
-                    {posts.map((post) => {
-                        const suggestions = suggestionsByPost[post.id] || [];
-                        const nameOptions = suggestions.map(s => ({
-                            id: s.id,
-                            name: s.text,
-                            author: usernames[s.author] || s.author,
-                            ethReward: post.prizeEth + ' ETH',
-                            voteCount: s.votes?.toString() || '0'
-                        }));
-                        const votedSuggestionId = userVotes[post.id];
-                        return (
-                            <PostCard
-                                key={post.id}
-                                id={post.id}
-                                author={usernames[post.creator] || post.creator}
-                                timeAgo={timeAgo(post.createdAt)}
-                                image={post.imageUrl || '/placeholder.jpg'}
-                                description={post.description}
-                                nameOptions={nameOptions}
-                                totalViews={post._count?.views ?? 0}
-                                totalVotes={post._count?.votes || 0}
-                                totalPrize={parseFloat(post.prizeEth)}
-                                isWalletConnected={isConnected}
-                                votedSuggestionId={votedSuggestionId}
-                                onAddName={(newName, setAddNameError) => handleAddName(post.id, newName, setAddNameError)}
-                                onVote={(optionId) => handleVote(post.id, optionId)}
-                            />
-                        );
-                    })}
+                    {loadingPosts ? (
+                        <div className="flex flex-col items-center justify-center py-16">
+                            <svg className="animate-spin h-10 w-10 text-[#E4A2B1] mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                            </svg>
+                            <div className="text-[#E4A2B1] text-lg font-medium">Loading posts...</div>
+                        </div>
+                    ) : (
+                        posts.map((post) => {
+                            const suggestions = suggestionsByPost[post.id] || [];
+                            const nameOptions = suggestions.map(s => ({
+                                id: s.id,
+                                name: s.text,
+                                author: usernames[s.author] || s.author,
+                                ethReward: post.prizeEth + ' ETH',
+                                voteCount: s.votes?.toString() || '0'
+                            }));
+                            const votedSuggestionId = userVotes[post.id];
+                            return (
+                                <PostCard
+                                    key={post.id}
+                                    id={post.id}
+                                    author={usernames[post.creator] || post.creator}
+                                    timeAgo={timeAgo(post.createdAt)}
+                                    image={post.imageUrl || '/placeholder.jpg'}
+                                    description={post.description}
+                                    nameOptions={nameOptions}
+                                    totalViews={post._count?.views ?? 0}
+                                    totalVotes={post._count?.votes || 0}
+                                    totalPrize={parseFloat(post.prizeEth)}
+                                    isWalletConnected={isConnected}
+                                    votedSuggestionId={votedSuggestionId}
+                                    onAddName={(newName, setAddNameError) => handleAddName(post.id, newName, setAddNameError)}
+                                    onVote={(optionId) => handleVote(post.id, optionId)}
+                                />
+                            );
+                        })
+                    )}
                 </div>
             </div>
         </div>
