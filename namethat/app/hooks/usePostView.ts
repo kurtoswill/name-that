@@ -8,7 +8,24 @@ interface UsePostViewProps {
 }
 
 export function usePostView({ postId, viewerId, initialViews, viewThreshold = 5000 }: UsePostViewProps) {
-    const [views, setViews] = useState(initialViews);
+    const [views, setViews] = useState<number>(initialViews);
+    // On mount, always fetch the latest view count from the backend
+    useEffect(() => {
+        const fetchViews = async () => {
+            try {
+                const res = await fetch(`/api/views?postId=${postId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (typeof data.views === 'number') {
+                        setViews(data.views);
+                    }
+                }
+            } catch (err) {
+                // ignore
+            }
+        };
+        fetchViews();
+    }, [postId]);
     const [isAnimating, setIsAnimating] = useState(false);
     const viewTimerRef = useRef<NodeJS.Timeout>();
     const postRef = useRef<HTMLDivElement>(null);

@@ -294,7 +294,7 @@ export default function PostCard({
                     <div className="flex items-center">
                         <Eye size={14} className="mr-1" />
                         <span className={isAnimating ? 'view-count-animate' : ''}>
-                            {views.toLocaleString()} views
+                            {(typeof views === 'number' && !isNaN(views) ? views : 0).toLocaleString()} views
                         </span>
                     </div>
                     <div>
