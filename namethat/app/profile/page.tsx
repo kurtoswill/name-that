@@ -6,6 +6,7 @@ import { Trophy, Medal, Award, LogOut, Eye, EyeOff, Copy, Check } from "lucide-r
 import UserPostCard from '@/app/components/UserPostCard';
 import { useAccount, useDisconnect } from 'wagmi';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 interface ApiPost {
     id: string;
@@ -53,7 +54,12 @@ const ProfilePage = () => {
 
     const [posts, setPosts] = useState<ApiPost[]>([]);
     const [suggestionsByPost, setSuggestionsByPost] = useState<Record<string, ApiSuggestion[]>>({});
-    const [user, setUser] = useState<any>(null);
+    interface ApiUser {
+        id: string;
+        username?: string | null;
+        // Add other user fields as needed
+    }
+    const [user, setUser] = useState<ApiUser | null>(null);
     const [loading, setLoading] = useState(false);
     const [postsLoading, setPostsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -195,9 +201,7 @@ const ProfilePage = () => {
                     <p className="text-sm text-[#F3E3EA]/70 mb-4">You need to connect your wallet to view and manage your posts.</p>
                     <div className="flex justify-center">
                         <ConnectWallet className="bg-[#21B65F] hover:bg-[#1ea856] text-[#12242E] px-4 py-2 rounded-lg text-sm font-medium transition-colors" />
-                    </div>
-                    <div className="mt-4 text-sm text-[#F3E3EA]/60">
-                        Or go back to the <a href="/" className="text-[#E4A2B1] underline">home page</a>.
+                        Or go back to the <Link href="/" className="text-[#E4A2B1] underline">home page</Link>.
                     </div>
                 </div>
             </div>

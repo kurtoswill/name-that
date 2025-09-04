@@ -1,13 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Eye, X, Check, Maximize2 } from 'lucide-react';
 import Image from 'next/image';
 import { usePostView } from '../hooks/usePostView';
 import { useAccount } from 'wagmi';
 
+// Normalize / compare address-like strings (tolerant to 0x casing and short/long forms)
+const normalizeAddr = (s?: string) => typeof s === 'string' ? s.toLowerCase().replace(/^0x/, '').trim() : '';
+const isSameAddr = (a?: string, b?: string) => {
+    const na = normalizeAddr(a);
+    const nb = normalizeAddr(b);
+    if (!na || !nb) return false;
+    return na === nb || na.endsWith(nb) || nb.endsWith(na);
+};
+
 interface NameOption {
     id: string;
     name: string;
-    author: string;
+    author: string; // raw address used for ownership checks
+    authorDisplay?: string; // optional human-friendly name for UI
     ethReward: string;
     hasVoted?: boolean;
 }
@@ -83,7 +93,9 @@ export default function PostCard({
         viewerId,
         initialViews: totalViews,
     });
-    const hasSuggested = isWalletConnected && nameOptions.some(opt => opt.author === address);
+    const hasSuggested = isWalletConnected && nameOptions.some(opt => isSameAddr(opt.author, address));
+
+    
 
     const handleVoteClick = (optionId: string) => {
         if (!isWalletConnected) return;
@@ -91,9 +103,28 @@ export default function PostCard({
             setVoteError('You have already voted on this post. Only one vote per post is allowed.');
             return;
         }
+        // Prevent voting on your own suggested name (be tolerant of casing/formatting)
+    const option = nameOptions.find(o => o.id === optionId);
+    if (option && address && isSameAddr(option.author, address)) {
+            setVoteError('You cannot vote for your own suggestion.');
+            return;
+        }
+
         setShowVoteConfirm(optionId);
         setVoteError(null);
     };
+
+    // Extra guard: if for any reason the confirmation modal is about to open for
+    // the viewer's own suggestion, cancel it and show the same error. This
+    // prevents the modal from appearing through racey code paths.
+    useEffect(() => {
+        if (!showVoteConfirm) return;
+        const option = nameOptions.find(o => o.id === showVoteConfirm);
+        if (option && address && isSameAddr(option.author, address)) {
+            setVoteError('You cannot vote for your own suggestion.');
+            setShowVoteConfirm(null);
+        }
+    }, [showVoteConfirm, address, nameOptions]);
 
     const confirmVote = (optionId: string) => {
         if (!isWalletConnected) return;
@@ -182,7 +213,7 @@ export default function PostCard({
                                     ~{prizePerVote.toFixed(6)} ETH
                                 </div>
                                 <div className="text-[#F3E3EA]/70 text-xs">
-                                    per vote
+                                    per winning voter
                                 </div>
                             </div>
                         </div>
@@ -210,43 +241,46 @@ export default function PostCard({
                         <Maximize2 size={20} className="text-[#FBE2A7]" />
                     </button>
                 </div>
-            {/* Image Modal */}
-            {showImageModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setShowImageModal(false)}>
-                    <div className="relative max-w-3xl w-full animate-scale-in" onClick={e => e.stopPropagation()}>
-                        <button
-                            type="button"
-                            className="absolute top-2 right-2 bg-[#20333D]/80 hover:bg-[#324859]/90 rounded-full p-1 z-20"
-                            title="Close"
-                            onClick={() => setShowImageModal(false)}
-                        >
-                            <X size={22} className="text-[#FBE2A7]" />
-                        </button>
-                        <Image
-                            src={image}
-                            alt="Full post image"
-                            width={1200}
-                            height={800}
-                            className="w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
-                            style={{ objectFit: 'contain', borderRadius: '0.75rem' }}
-                        />
+                {/* Image Modal */}
+                {showImageModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setShowImageModal(false)}>
+                        <div className="relative max-w-3xl w-full animate-scale-in" onClick={e => e.stopPropagation()}>
+                            <button
+                                type="button"
+                                className="absolute top-2 right-2 bg-[#20333D]/80 hover:bg-[#324859]/90 rounded-full p-1 z-20"
+                                title="Close"
+                                onClick={() => setShowImageModal(false)}
+                            >
+                                <X size={22} className="text-[#FBE2A7]" />
+                            </button>
+                            <Image
+                                src={image}
+                                alt="Full post image"
+                                width={1200}
+                                height={800}
+                                className="w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+                                style={{ objectFit: 'contain', borderRadius: '0.75rem' }}
+                            />
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
                 {/* Description */}
-                <div className="mb-4">
-                    <p className="text-[#F3E3EA] text-sm leading-relaxed">
-                        {expandedDescription ? description : truncateText(description, 120)}
-                        {description.length > 120 && (
-                            <button
-                                onClick={() => setExpandedDescription(!expandedDescription)}
-                                className="text-[#E4A2B1] ml-1 hover:text-[#F3E3EA] transition-colors"
-                            >
-                                {expandedDescription ? 'less' : 'more'}
-                            </button>
-                        )}
-                    </p>
+                <div className="my-4">
+                    <blockquote className="bg-[#12242E]/40 border-l-4 border-[#FBE2A7] p-3 rounded-md">
+                        <p className="text-[#F3E3EA] text-sm leading-relaxed mb-0">
+                            {expandedDescription ? description : truncateText(description, 120)}
+                            {description.length > 120 && (
+                                <button
+                                    onClick={() => setExpandedDescription(!expandedDescription)}
+                                    className="text-[#E4A2B1] text-xs font-medium hover:opacity-90 focus:outline-none focus:ring-0 active:opacity-90 transition-opacity"
+                                >
+                                    <span>&nbsp;</span>
+                                    {expandedDescription ? 'Show less' : 'Read more'}
+                                </button>
+                            )}
+                        </p>
+                    </blockquote>
                 </div>
 
                 {/* Name Options Header */}
@@ -284,6 +318,7 @@ export default function PostCard({
                 <div className="space-y-2 mb-4">
                     {nameOptions.map((option) => {
                         const hasVoted = votedOptions.has(option.id);
+                        const isOwn = address && isSameAddr(option.author, address);
                         return (
                             <div
                                 key={option.id}
@@ -294,7 +329,7 @@ export default function PostCard({
                                         {option.name}
                                     </div>
                                     <div className="text-[#FBE2A7]/70 text-xs">
-                                        by {option.author}
+                                        by {option.authorDisplay ?? option.author}
                                     </div>
                                 </div>
 
@@ -306,7 +341,14 @@ export default function PostCard({
 
                                     {/* Vote Button */}
                                     <button
-                                        onClick={() => handleVoteClick(option.id)}
+                                        onClick={() => {
+                                            // Immediate ownership check before any modal
+                                            if (isOwn) {
+                                                setVoteError('You cannot vote for your own suggestion.');
+                                                return;
+                                            }
+                                            handleVoteClick(option.id);
+                                        }}
                                         disabled={!isWalletConnected || hasVoted}
                                         className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${!isWalletConnected
                                             ? 'bg-[#324859] border border-[#324859] text-[#FBE2A7]/50 cursor-not-allowed'
@@ -314,7 +356,7 @@ export default function PostCard({
                                                 ? 'bg-[#FBE2A7]/20 border border-[#FBE2A7] text-[#FBE2A7] cursor-not-allowed'
                                                 : 'bg-[#E4A2B1]/20 text-[#E4A2B1] hover:bg-[#E4A2B1] border border-[#E4A2B1] hover:text-[#12242E] cursor-pointer'
                                             }`}
-                                        title={!isWalletConnected ? 'Connect wallet to vote' : undefined}
+                                        title={isOwn ? 'You cannot vote for your own suggestion' : (!isWalletConnected ? 'Connect wallet to vote' : undefined)}
                                     >
                                         {!isWalletConnected ? 'Connect wallet' : hasVoted ? 'Voted' : 'Vote'}
                                     </button>
@@ -395,7 +437,7 @@ export default function PostCard({
                                 className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center ${!newNameInput.trim() || addNameSuccess
                                     ? 'bg-[#324859] text-[#FBE2A7]/50 cursor-not-allowed'
                                     : 'bg-[#E4A2B1] text-[#12242E] hover:bg-[#e29cad]'
-                                } ${addNameSuccess ? 'animate-success' : ''}`}
+                                    } ${addNameSuccess ? 'animate-success' : ''}`}
                             >
                                 {addNameSuccess ? <><Check size={18} className="mr-1" /> Success!</> : 'Add Name'}
                             </button>
@@ -427,7 +469,7 @@ export default function PostCard({
                             </p>
                             <p className="text-[#FBE2A7]/80 text-xs mb-3">
                                 Suggested by: <span className="font-semibold text-[#FBE2A7]">
-                                    {nameOptions.find(opt => opt.id === showVoteConfirm)?.author}
+                                    {nameOptions.find(opt => opt.id === showVoteConfirm)?.authorDisplay ?? nameOptions.find(opt => opt.id === showVoteConfirm)?.author}
                                 </span>
                             </p>
                             <div className="bg-[#324859] p-3 rounded-lg">

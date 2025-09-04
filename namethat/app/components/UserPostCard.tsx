@@ -26,7 +26,6 @@ interface UserPostCardProps {
 }
 
 export default function UserPostCard({
-    id,
     author,
     timeAgo,
     image,
@@ -104,7 +103,7 @@ export default function UserPostCard({
                                 ~{prizePerVote.toFixed(6)} ETH
                             </div>
                             <div className="text-[#F3E3EA]/70 text-xs">
-                                per vote
+                                per winning voter
                             </div>
                         </div>
                     </div>
@@ -157,20 +156,18 @@ export default function UserPostCard({
                 {/* Description */}
                 <div className="my-4">
                     <blockquote className="bg-[#12242E]/40 border-l-4 border-[#FBE2A7] p-3 rounded-md">
-                        <p className="text-[#F3E3EA] text-sm leading-relaxed mb-2">
+                        <p className="text-[#F3E3EA] text-sm leading-relaxed mb-0">
                             {expandedDescription ? description : truncateText(description, 120)}
-                        </p>
-
-                        {description.length > 120 && (
-                            <div className="text-right">
+                            {description.length > 120 && (
                                 <button
                                     onClick={() => setExpandedDescription(!expandedDescription)}
-                                    className="text-[#E4A2B1] text-xs font-medium hover:text-[#F3E3EA] transition-colors"
+                                    className="text-[#E4A2B1] text-xs font-medium hover:opacity-90 focus:outline-none focus:ring-0 active:opacity-90 transition-opacity"
                                 >
-                                    {expandedDescription ? 'Show less' : 'Read more'}
+                                    <span>&nbsp;</span>
+                                    {expandedDescription ? ' Show less' : ' Read more'}
                                 </button>
-                            </div>
-                        )}
+                            )}
+                        </p>
                     </blockquote>
                 </div>
 

@@ -11,6 +11,11 @@ import Image from 'next/image';
 interface ApiPost { id: string; creator: string; title: string; description: string; imageUrl?: string | null; createdAt: string; prizeEth: string; usdAtCreation: string; _count?: { votes: number; suggestions: number; views: number } }
 interface ApiSuggestion { id: string; postId: string; author: string; text: string; votes?: number }
 
+interface ApiUser {
+    id: string;
+    username?: string;
+    // Add other user properties here if needed
+}
 
 export default function HomePage() {
     const { address, isConnected } = useAccount();
@@ -28,7 +33,7 @@ export default function HomePage() {
     const [username, setUsername] = useState('');
     const [posts, setPosts] = useState<ApiPost[]>([]);
     const [suggestionsByPost, setSuggestionsByPost] = useState<Record<string, ApiSuggestion[]>>({});
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<ApiUser | null>(null);
     const [usernames, setUsernames] = useState<Record<string, string>>({});
     const [userVotes, setUserVotes] = useState<Record<string, string>>({}); // postId -> suggestionId
     const [loadingPosts, setLoadingPosts] = useState(true);
@@ -84,7 +89,8 @@ export default function HomePage() {
                 const votesJson = await votesRes.json();
                 // votes: [{ postId, suggestionId, ... }]
                 const voteMap: Record<string, string> = {};
-                (votesJson.votes || []).forEach((v: any) => {
+                interface ApiVote { postId: string; suggestionId: string }
+                (votesJson.votes || []).forEach((v: ApiVote) => {
                     if (v.postId && v.suggestionId) voteMap[v.postId] = v.suggestionId;
                 });
                 setUserVotes(voteMap);
@@ -327,7 +333,10 @@ export default function HomePage() {
                             const nameOptions = suggestions.map(s => ({
                                 id: s.id,
                                 name: s.text,
-                                author: usernames[s.author] || s.author,
+                                // keep raw author address for ownership checks
+                                author: s.author,
+                                // separate display-friendly author name
+                                authorDisplay: usernames[s.author] || s.author,
                                 ethReward: post.prizeEth + ' ETH',
                                 voteCount: s.votes?.toString() || '0'
                             }));
