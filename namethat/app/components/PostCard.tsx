@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Eye, X, Check } from 'lucide-react';
+import { Plus, Eye, X, Check, Maximize2 } from 'lucide-react';
 import Image from 'next/image';
 import { usePostView } from '../hooks/usePostView';
 import { useAccount } from 'wagmi';
@@ -53,6 +53,7 @@ export default function PostCard({
     const [voteError, setVoteError] = useState<string | null>(null);
     const [addNameError, setAddNameError] = useState<string | null>(null);
     const [addNameSuccess, setAddNameSuccess] = useState(false);
+    const [showImageModal, setShowImageModal] = useState(false);
 
     // Calculate prize distribution (80% after 20% platform fee)
     const prizeAfterFees = totalPrize ? totalPrize * 0.8 : 0;
@@ -188,16 +189,50 @@ export default function PostCard({
                     </div>
                 )}
 
-                {/* Image */}
-                <Image
-                    src={image}
-                    alt="Post content"
-                    width={600}
-                    height={192}
-                    className="w-full h-48 object-cover rounded-lg"
-                    style={{ objectFit: 'cover', borderRadius: '0.5rem' }}
-                    priority
-                />
+
+                {/* Image with maximize button */}
+                <div className="relative w-full">
+                    <Image
+                        src={image}
+                        alt="Post content"
+                        width={600}
+                        height={192}
+                        className="w-full h-48 object-cover rounded-lg"
+                        style={{ objectFit: 'cover', borderRadius: '0.5rem' }}
+                        priority
+                    />
+                    <button
+                        type="button"
+                        className="absolute top-2 right-2 bg-[#20333D]/80 hover:bg-[#324859]/90 rounded-full p-1 transition-colors z-10"
+                        title="View full image"
+                        onClick={() => setShowImageModal(true)}
+                    >
+                        <Maximize2 size={20} className="text-[#FBE2A7]" />
+                    </button>
+                </div>
+            {/* Image Modal */}
+            {showImageModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setShowImageModal(false)}>
+                    <div className="relative max-w-3xl w-full animate-scale-in" onClick={e => e.stopPropagation()}>
+                        <button
+                            type="button"
+                            className="absolute top-2 right-2 bg-[#20333D]/80 hover:bg-[#324859]/90 rounded-full p-1 z-20"
+                            title="Close"
+                            onClick={() => setShowImageModal(false)}
+                        >
+                            <X size={22} className="text-[#FBE2A7]" />
+                        </button>
+                        <Image
+                            src={image}
+                            alt="Full post image"
+                            width={1200}
+                            height={800}
+                            className="w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+                            style={{ objectFit: 'contain', borderRadius: '0.75rem' }}
+                        />
+                    </div>
+                </div>
+            )}
 
                 {/* Description */}
                 <div className="mb-4">
@@ -422,18 +457,3 @@ export default function PostCard({
         </>
     );
 }
-
-/* Add this to your global CSS (e.g., app/globals.css):
-.animate-success {
-  animation: pop-scale-green 1s cubic-bezier(0.4, 0, 0.2, 1);
-  background: #21B65F !important;
-  color: #12242E !important;
-  border: 1px solid #21B65F !important;
-}
-@keyframes pop-scale-green {
-  0% { transform: scale(1); }
-  20% { transform: scale(1.15); }
-  60% { background: #21B65F; color: #12242E; }
-  100% { transform: scale(1); }
-}
-*/

@@ -1,16 +1,34 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
+import { ConnectWallet } from '@coinbase/onchainkit/wallet';
 import { Trophy, Medal, Award, LogOut, Eye, EyeOff, Copy, Check } from "lucide-react";
 import UserPostCard from '@/app/components/UserPostCard';
 import { useAccount, useDisconnect } from 'wagmi';
 import { useRouter } from 'next/navigation';
 
-interface ApiPost { id: string; creator: string; description: string; imageUrl?: string | null; createdAt: string; prizeEth: string; _count?: { votes: number } }
-interface ApiSuggestion { id: string; postId: string; author: string; text: string }
+interface ApiPost {
+    id: string;
+    creator: string;
+    description: string;
+    imageUrl?: string | null;
+    createdAt: string;
+    prizeEth: string;
+    views?: number;
+    totalVotes?: number;
+    _count?: { votes: number };
+}
+interface ApiSuggestion {
+    id: string;
+    postId: string;
+    author: string;
+    text: string;
+    authorUsername?: string | null;
+    votes?: number;
+}
 
 const ProfilePage = () => {
-    const [activeTab, setActiveTab] = useState("Post");
+    // Removed leaderboard tab state
     const [showFullAddress, setShowFullAddress] = useState(false);
     const [copied, setCopied] = useState(false);
     const { address, isConnected } = useAccount();
@@ -37,24 +55,92 @@ const ProfilePage = () => {
     const [suggestionsByPost, setSuggestionsByPost] = useState<Record<string, ApiSuggestion[]>>({});
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+    const [postsLoading, setPostsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [mounted, setMounted] = useState(false);
 
-    useEffect(() => {
-        const load = async () => {
+    // Centralized loader so we always fetch views, suggestions and votes consistently
+    const loadPosts = useCallback(async () => {
+        setPostsLoading(true);
+        try {
             const res = await fetch('/api/posts');
             const json = await res.json();
             const items: ApiPost[] = (json.posts || []).filter((p: ApiPost) => address ? p.creator.toLowerCase() === address.toLowerCase() : false);
-            setPosts(items);
+
+            // Fetch views and suggestions/votes for each post in parallel
             const dict: Record<string, ApiSuggestion[]> = {};
-            await Promise.all(items.map(async (p) => {
-                const sr = await fetch(`/api/suggestions?postId=${p.id}`);
-                const sj = await sr.json();
-                dict[p.id] = sj.suggestions || [];
+            const postVotes: Record<string, number> = {};
+
+            const postsWithDetails = await Promise.all(items.map(async (p) => {
+                // views
+                let views = 0;
+                try {
+                    const viewsRes = await fetch(`/api/views?postId=${p.id}`);
+                    const viewsJson = await viewsRes.json();
+                    views = viewsJson?.views ?? 0;
+                } catch {
+                    views = 0;
+                }
+
+                // suggestions
+                let suggestions: ApiSuggestion[] = [];
+                try {
+                    const sr = await fetch(`/api/suggestions?postId=${p.id}`);
+                    const sj = await sr.json();
+                    suggestions = sj.suggestions || [];
+                } catch {}
+
+                // votes for this post
+                let votesForPost: { suggestionId: string }[] = [];
+                try {
+                    const votesRes = await fetch(`/api/votes?postId=${p.id}`);
+                    const votesJson = await votesRes.json();
+                    votesForPost = votesJson.votes || [];
+                } catch {}
+
+                // enrich suggestions with username and vote counts
+                let totalVotes = 0;
+                const suggestionsWithDetails = await Promise.all(suggestions.map(async (s: ApiSuggestion) => {
+                    let authorUsername = null;
+                    try {
+                        const userRes = await fetch(`/api/user?id=${s.author}`);
+                        const userData = await userRes.json();
+                        authorUsername = userData?.username;
+                    } catch {}
+                    const votes = votesForPost.filter(v => v.suggestionId === s.id).length;
+                    totalVotes += votes;
+                    return {
+                        ...s,
+                        authorUsername,
+                        votes,
+                    };
+                }));
+
+                dict[p.id] = suggestionsWithDetails;
+                postVotes[p.id] = totalVotes;
+
+                return { ...p, views, totalVotes };
             }));
+
             setSuggestionsByPost(dict);
-        };
-        if (address) load();
+            setPosts(postsWithDetails);
+        } catch (err) {
+            console.error('Failed to load posts', err);
+            setPosts([]);
+            setSuggestionsByPost({});
+        } finally {
+            setPostsLoading(false);
+        }
     }, [address]);
+
+    useEffect(() => {
+        if (address) loadPosts();
+    }, [loadPosts, address]);
+
+    // Track client mount to avoid SSR/client markup mismatch
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     useEffect(() => {
         const fetchUser = async () => {
@@ -70,7 +156,7 @@ const ProfilePage = () => {
                     const data = await res.json();
                     setUser(data);
                 }
-            } catch (e) {
+            } catch {
                 setError('Failed to fetch user');
                 setUser(null);
             }
@@ -88,102 +174,47 @@ const ProfilePage = () => {
     const handlePickWinner = async (postId: string, optionId: string) => {
         if (!address) return;
         await fetch('/api/winner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ postId, winnerSuggestionId: optionId, caller: address }) });
-        // reload posts
-        const res = await fetch('/api/posts');
-        const json = await res.json();
-        const items: ApiPost[] = (json.posts || []).filter((p: ApiPost) => address ? p.creator.toLowerCase() === address.toLowerCase() : false);
-        setPosts(items);
+        // reload posts and related data (views/votes)
+        await loadPosts();
     };
 
-    const leaderboardData = [];
+    // Removed leaderboard data and helpers
 
-    const getRankStyle = (rank: number) => {
-        switch (rank) {
-            case 1:
-                return "bg-yellow-400 text-black border-yellow-300"; // Gold
-            case 2:
-                return "bg-gray-300 text-black border-gray-400"; // Silver
-            case 3:
-                return "bg-amber-600 text-white border-amber-700"; // Bronze
-            default:
-                return "bg-[#324859]/40 text-[#F3E3EA] border-[#324859]/60";
-        }
-    };
 
-    const getRankIcon = (rank: number) => {
-        switch (rank) {
-            case 1:
-                return <Trophy className="w-5 h-5 text-black" />;
-            case 2:
-                return <Medal className="w-5 h-5 text-black" />;
-            case 3:
-                return <Award className="w-5 h-5 text-white" />;
-            default:
-                return null;
-        }
-    };
+    // Wait for client mount before reading wallet state to avoid hydration mismatch
+    if (!mounted) {
+        return null;
+    }
 
-    // Sample post data for demonstration
-    const samplePosts = [
-        {
-            id: '1',
-            author: 'Kazel Tuazon',
-            timeAgo: '2h ago',
-            image: '/placeholder.jpg',
-            description: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-            nameOptions: [
-                { id: '1', name: 'Frieren', author: '@kzlrwnjne', ethReward: '0.001 ETH', voteCount: '25k' },
-                { id: '2', name: 'Frieren', author: '@kzlrwnjne', ethReward: '0.001 ETH', voteCount: '25k', hasVoted: true },
-                { id: '3', name: 'Frieren', author: '@kzlrwnjne', ethReward: '0.001 ETH', voteCount: '25k' }
-            ],
-            totalViews: 1200,
-            totalVotes: 75000
-        },
-        {
-            id: '2',
-            author: '@animefan2024',
-            timeAgo: '4h ago',
-            image: '/placeholder.jpg',
-            description: 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.',
-            nameOptions: [
-                { id: '4', name: 'Aria', author: '@animefan2024', ethReward: '0.002 ETH', voteCount: '18k' },
-                { id: '5', name: 'Luna', author: '@otakulover', ethReward: '0.002 ETH', voteCount: '32k', hasVoted: true }
-            ],
-            totalViews: 856,
-            totalVotes: 50000
-        },
-        {
-            id: '3',
-            author: '@mangareader',
-            timeAgo: '6h ago',
-            image: '/placeholder.jpg',
-            description: 'At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.',
-            nameOptions: [
-                { id: '6', name: 'Seraphina', author: '@mangareader', ethReward: '0.003 ETH', voteCount: '42k' },
-                { id: '7', name: 'Nova', author: '@animeexpert', ethReward: '0.001 ETH', voteCount: '28k' },
-                { id: '8', name: 'Celestia', author: '@otakumaster', ethReward: '0.002 ETH', voteCount: '55k', hasVoted: true },
-                { id: '9', name: 'Aurora', author: '@weeblife', ethReward: '0.002 ETH', voteCount: '19k' }
-            ],
-            totalViews: 2100,
-            totalVotes: 144000
-        },
-        {
-            id: '4',
-            author: '@cosplayqueen',
-            timeAgo: '8h ago',
-            image: '/placeholder.jpg',
-            description: 'Temporibus autem quibusdam et aut officiis debitis aut rerum necessitatibus saepe eveniet ut et voluptates repudiandae sint et molestiae non recusandae. Itaque earum rerum hic tenetur a sapiente delectus.',
-            nameOptions: [
-                { id: '10', name: 'Shadow', author: '@cosplayqueen', ethReward: '0.005 ETH', voteCount: '67k' },
-                { id: '11', name: 'Kage', author: '@ninjafan', ethReward: '0.002 ETH', voteCount: '34k' },
-                { id: '12', name: 'Raven', author: '@stealthmaster', ethReward: '0.003 ETH', voteCount: '89k', hasVoted: true }
-            ],
-            totalViews: 3700,
-            totalVotes: 190000
-        }
-    ];
+    // If wallet isn't connected, show a clear connect prompt (don't trap users on a spinner)
+    if (!isConnected || !address) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[#12242E] text-[#F3E3EA] p-4">
+                <div className="bg-[#20333D] rounded-xl p-6 max-w-md w-full text-center border border-[#324859]">
+                    <h2 className="text-xl font-semibold mb-2">Connect your wallet</h2>
+                    <p className="text-sm text-[#F3E3EA]/70 mb-4">You need to connect your wallet to view and manage your posts.</p>
+                    <div className="flex justify-center">
+                        <ConnectWallet className="bg-[#21B65F] hover:bg-[#1ea856] text-[#12242E] px-4 py-2 rounded-lg text-sm font-medium transition-colors" />
+                    </div>
+                    <div className="mt-4 text-sm text-[#F3E3EA]/60">
+                        Or go back to the <a href="/" className="text-[#E4A2B1] underline">home page</a>.
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
-    if (loading) return <div>Loading...</div>;
+    if (loading) return (
+        <div className="min-h-screen flex items-center justify-center bg-[#12242E] text-[#F3E3EA]">
+            <div className="flex flex-col items-center">
+                <svg className="animate-spin h-10 w-10 text-[#E4A2B1] mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                </svg>
+                <div className="text-[#E4A2B1] text-lg font-medium">Loading profile...</div>
+            </div>
+        </div>
+    );
     if (error) return <div>{error}</div>;
 
     return (
@@ -267,99 +298,48 @@ const ProfilePage = () => {
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex bg-[#20333D] rounded-lg p-1 mb-6 max-w-sm mx-auto border border-[#324859]">
-                {["Post", "Leaderboards"].map((tab) => (
-                    <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === tab
-                                ? "bg-[#24272B] text-[#E4A2B1]"
-                                : "text-[#E4A2B1]/60 hover:text-[#E4A2B1]"
-                            }`}
-                    >
-                        {tab}
-                    </button>
-                ))}
+            {/* Posts Section Only */}
+            <div className="max-w-md pb-28 mx-auto">
+                {postsLoading ? (
+                    <div className="flex flex-col items-center justify-center py-16">
+                        <svg className="animate-spin h-10 w-10 text-[#E4A2B1] mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                        </svg>
+                            <div className="text-[#E4A2B1] text-lg font-medium">Loading posts...</div>
+                    </div>
+                ) : (posts && posts.length > 0) ? (
+                    posts.map((post) => (
+                        <UserPostCard
+                            key={post.id}
+                            id={post.id}
+                            author={user?.username || formatAddress(post.creator)}
+                            timeAgo={timeAgo(post.createdAt)}
+                            image={post.imageUrl || '/placeholder.jpg'}
+                            description={post.description}
+                            nameOptions={(suggestionsByPost[post.id] || []).map(s => ({
+                                id: s.id,
+                                name: s.text,
+                                author: s.authorUsername || formatAddress(s.author),
+                                ethReward: post.prizeEth + ' ETH',
+                                voteCount: s.votes ?? 0,
+                            }))}
+                            totalViews={post.views ?? 0}
+                            totalVotes={post.totalVotes ?? 0}
+                            totalPrize={parseFloat(post.prizeEth)}
+                            isWalletConnected={true}
+                            onPickWinner={(optionId) => handlePickWinner(post.id, optionId)}
+                        />
+                    ))
+                ) : (
+                    <div className="text-center py-12">
+                        <div className="text-[#FBE2A7]/70 text-lg mb-2">No posts yet</div>
+                        <div className="text-[#F3E3EA]/50 text-sm">
+                            Start creating posts to see them here
+                        </div>
+                    </div>
+                )}
             </div>
-
-            {/* Post Tab */}
-            {activeTab === "Post" && (
-                <div className="max-w-md mx-auto">
-                    {samplePosts.length > 0 ? (
-                        samplePosts.map((post) => (
-                            <UserPostCard
-                                key={post.id}
-                                id={post.id}
-                                author={post.author}
-                                timeAgo={post.timeAgo}
-                                image={post.image}
-                                description={post.description}
-                                nameOptions={post.nameOptions}
-                                totalViews={post.totalViews}
-                                totalVotes={post.totalVotes}
-                                totalPrize={post.totalPrize}
-                                isWalletConnected={true} // Assume connected on profile page
-                                onPickWinner={(optionId) => handlePickWinner(post.id, optionId)}
-                            />
-                        ))
-                    ) : (
-                        <div className="text-center py-12">
-                            <div className="text-[#FBE2A7]/70 text-lg mb-2">No posts yet</div>
-                            <div className="text-[#F3E3EA]/50 text-sm">
-                                Start creating posts to see them here
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Leaderboard Tab */}
-            {activeTab === "Leaderboards" && (
-                <div className="max-w-md mx-auto space-y-3">
-                    {leaderboardData.map((user) => (
-                        <div
-                            key={user.id}
-                            className="bg-[#20333D]/80 backdrop-blur-sm rounded-xl p-4 border border-[#324859]"
-                        >
-                            <div className="flex items-center justify-between">
-                                {/* Left Side */}
-                                <div className="flex items-center space-x-4">
-                                    {/* Rank Badge */}
-                                    <div
-                                        className={`w-8 h-8 rounded-full border flex items-center justify-center text-sm font-bold ${getRankStyle(
-                                            user.rank
-                                        )}`}
-                                    >
-                                        {user.rank <= 3 ? getRankIcon(user.rank) : user.rank}
-                                    </div>
-
-                                    {/* Avatar */}
-                                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#F3E3EA] to-[#E4A2B1] flex items-center justify-center text-[#12242E] font-semibold">
-                                        {user.name.charAt(0)}
-                                    </div>
-
-                                    {/* User Info */}
-                                    <div className="flex-1">
-                                        <h3 className="font-semibold text-sm">{user.name}</h3>
-                                        <p className="text-[#F3E3EA]/70 text-xs">
-                                            by {user.username} • {user.timeAgo}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Votes Badge */}
-                                <div className="flex items-center bg-[#21B65F]/20 px-3 py-1 rounded-full space-x-2 border border-[#21B65F]">
-                                    <span className="text-xs flex items-center gap-1">
-                                        <p className="text-[#21B65F]">{user.votes}</p>
-                                        <p className="text-[#FBE2A7]">Voted</p>
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
         </div>
     );
 };

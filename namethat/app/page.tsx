@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount, useBalance } from 'wagmi';
+import { ExternalLink } from 'lucide-react';
+import { useAccount, useBalance, useBlockNumber } from 'wagmi';
 import { ConnectWallet } from '@coinbase/onchainkit/wallet';
 import PostCard from '@/app/components/PostCard';
 import Image from 'next/image';
@@ -13,7 +14,16 @@ interface ApiSuggestion { id: string; postId: string; author: string; text: stri
 
 export default function HomePage() {
     const { address, isConnected } = useAccount();
-    const { data: balance } = useBalance({ address });
+    const { data: balance, refetch: refetchBalance } = useBalance({ address });
+    // subscribe to new blocks and refetch balance when a block arrives (no polling)
+    const { data: block } = useBlockNumber({ watch: true });
+
+    useEffect(() => {
+        if (typeof block === 'number' && refetchBalance) {
+            // refetch balance on new block
+            refetchBalance();
+        }
+    }, [block, refetchBalance]);
 
     const [username, setUsername] = useState('');
     const [posts, setPosts] = useState<ApiPost[]>([]);
@@ -195,7 +205,7 @@ export default function HomePage() {
             {/* Header with wallet connection only */}
             <div className="sticky top-0 z-20 p-4">
                 <div className="flex items-center justify-between">
-                    <h1 className="text-xl font-semibold text-[#F3E3EA]">NameThat</h1>
+                    <Image src="/namethat-logo.png" alt="NameThat Logo" width={60} height={60} className="mr-2" />
                     {!isConnected ? (
                         <div className="mini-app-theme" style={{ touchAction: 'manipulation' }}>
                             <ConnectWallet className="bg-[#21B65F] hover:bg-[#1ea856] text-[#12242E] px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
@@ -203,14 +213,17 @@ export default function HomePage() {
                             </ConnectWallet>
                         </div>
                     ) : (
-                        <a href="/profile">
-                            <div className="flex items-center bg-[#20333D]/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-[#324859]/50">
-                                <div className="w-2 h-2 bg-[#21B65F] rounded-full mr-2"></div>
-                                <div className="text-sm">
-                                    <div className="text-[#F3E3EA] font-medium">{username}</div>
-                                    <div className="text-[#FBE2A7]/70 text-xs">
-                                        {balance ? `${parseFloat(balance.formatted).toFixed(4)} ${balance.symbol}` : '0.0000 ETH'}
+                        <a href="/profile" className="group" aria-label="Open profile" title="Open profile">
+                            <div className="flex items-center bg-[#20333D]/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-[#324859]/50 cursor-pointer hover:scale-[1.01] transition-transform">
+                                <div className="w-2 h-2 bg-[#21B65F] rounded-full mr-2" />
+                                <div className="text-sm flex items-center">
+                                    <div>
+                                        <div className="text-[#F3E3EA] font-medium">{username}</div>
+                                        <div className="text-[#FBE2A7]/70 text-xs">
+                                            {balance ? `${parseFloat(balance.formatted).toFixed(4)} ${balance.symbol}` : '0.0000 ETH'}
+                                        </div>
                                     </div>
+                                    <ExternalLink size={14} className="ml-3 text-[#FBE2A7]/70 opacity-90 transform transition-transform group-hover:translate-x-1" />
                                 </div>
                             </div>
                         </a>
