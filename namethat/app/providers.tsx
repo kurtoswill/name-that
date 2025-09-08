@@ -2,12 +2,12 @@
 
 import { type ReactNode } from "react";
 import { WagmiProvider, createConfig, http } from "wagmi";
-import { base } from "wagmi/chains";
+import { base, baseSepolia } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { coinbaseWallet } from 'wagmi/connectors';
 
 const config = createConfig({
-  chains: [base],
+  chains: [base, baseSepolia],
   connectors: [
     coinbaseWallet({
       appName: process.env.NEXT_PUBLIC_ONCHAINKIT_PROJECT_NAME || 'NameThat',
@@ -15,7 +15,8 @@ const config = createConfig({
     })
   ],
   transports: {
-    [base.id]: http()
+    [base.id]: http(),
+    [baseSepolia.id]: http("https://sepolia.base.org"),
   }
 });
 
