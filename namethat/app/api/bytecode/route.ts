@@ -1,44 +1,40 @@
-import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { NextRequest, NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
 
-export async function GET(request: NextRequest) {
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const contract = searchParams.get("contract");
+
+  if (!contract) {
+    return NextResponse.json({ error: "Missing contract name" }, { status: 400 });
+  }
+
   try {
-    const url = new URL(request.url);
-    const contract = url.searchParams.get('contract');
-    if (!contract) {
-      return NextResponse.json({ error: 'Missing contract query parameter' }, { status: 400 });
+    // Locate artifact from Hardhat or Foundry build
+    const artifactPath = path.join(
+        process.cwd(),
+        "artifacts",
+        "contracts",
+        `${contract}.sol`,
+        `${contract}.json`
+    );
+
+    if (!fs.existsSync(artifactPath)) {
+      return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
     }
 
-    // Resolve possible artifact locations
-    const workspaceRoot = process.cwd();
-    // common Hardhat/Forge/build locations
-    const candidates = [
-      path.join(workspaceRoot, 'artifacts', 'contracts', `${contract}.sol`, `${contract}.json`),
-      path.join(workspaceRoot, 'artifacts', `${contract}.json`),
-      path.join(workspaceRoot, 'out', `${contract}.json`),
-      path.join(workspaceRoot, 'build', `${contract}.json`),
-    ];
+    const artifact = JSON.parse(fs.readFileSync(artifactPath, "utf8"));
 
-    for (const p of candidates) {
-      if (fs.existsSync(p)) {
-        try {
-          const raw = fs.readFileSync(p, 'utf8');
-          const json = JSON.parse(raw);
-          // Try common shapes: { bytecode } or { evm: { bytecode: { object } } }
-          const bytecode = json.bytecode || (json.evm && json.evm.bytecode && json.evm.bytecode.object) || json.data?.bytecode?.object;
-          if (!bytecode) continue;
-          return NextResponse.json({ bytecode });
-        } catch (e) {
-          console.error('Failed to read/parse artifact', p, e);
-          return NextResponse.json({ error: 'Failed to read artifact file' }, { status: 500 });
-        }
-      }
-    }
-
-    return NextResponse.json({ error: 'Bytecode artifact not found. Place compiled contract JSON in artifacts/ or build/' }, { status: 404 });
+    return NextResponse.json({
+      abi: artifact.abi,
+      bytecode: artifact.bytecode,
+    });
   } catch (err) {
-    console.error('Bytecode route error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Error reading artifact:", err);
+    return NextResponse.json(
+        { error: "Failed to load contract artifact" },
+        { status: 500 }
+    );
   }
 }
