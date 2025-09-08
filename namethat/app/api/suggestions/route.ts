@@ -1,50 +1,39 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
 
-export async function GET(request: NextRequest) {
+// GET /api/suggestions?postId=...
+export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const postId = searchParams.get('postId') || undefined;
-    const suggestions = await db.suggestion.findMany({
-      where: postId ? { postId } : {},
-      orderBy: { createdAt: 'desc' },
-    });
-    return NextResponse.json({ suggestions });
-  } catch (error) {
-    console.error('Error fetching suggestions:', error)
-    return NextResponse.json(
-        { error: 'Failed to fetch suggestions' },
-        { status: 500 }
-    )
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const { postId, author, text } = await request.json() as { postId: string; author: string; text: string };
-    if (!postId) return NextResponse.json({ error: 'postId required' }, { status: 400 });
-    if (!author || !/^0x[0-9a-fA-F]{40}$/.test(author)) return NextResponse.json({ error: 'Valid author address required' }, { status: 400 });
-    if (!text || !text.trim()) return NextResponse.json({ error: 'Suggestion text required' }, { status: 400 });
-    if (text.length > 140) return NextResponse.json({ error: 'Suggestion too long' }, { status: 400 });
-
-    const post = await db.post.findUnique({ where: { id: postId } });
-    if (!post || post.deleted) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
-
-    await db.user.upsert({ where: { id: author }, update: {}, create: { id: author } });
-    try {
-      const suggestion = await db.suggestion.create({ data: { postId, author, text: text.trim() } });
-      return NextResponse.json({ suggestion }, { status: 201 })
-    } catch (error: any) {
-      if (error.code === 'P2002') {
-        return NextResponse.json({ error: 'You have already suggested a name for this post.' }, { status: 409 });
-      }
-      throw error;
+    const { searchParams } = new URL(req.url);
+    const postId = searchParams.get('postId');
+    if (!postId) {
+      return NextResponse.json({ error: 'Missing postId' }, { status: 400 });
     }
-  } catch (error) {
-    console.error('Error creating suggestion:', error)
-    return NextResponse.json(
-        { error: 'Failed to create suggestion' },
-        { status: 500 }
-    )
+    const suggestions = await db.suggestion.findMany({
+      where: { postId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        postId: true,
+        author: true,
+        text: true,
+        createdAt: true,
+        user: { select: { username: true } },
+        _count: { select: { votes: true } },
+      },
+    });
+    const result = suggestions.map((s) => ({
+      id: s.id,
+      postId: s.postId,
+      author: s.author,
+      text: s.text,
+      createdAt: s.createdAt,
+      authorUsername: s.user?.username ?? null,
+      votes: s._count.votes,
+    }));
+    return NextResponse.json({ suggestions: result });
+  } catch (e) {
+    console.error('GET /api/suggestions failed', e);
+    return NextResponse.json({ error: 'Failed to fetch suggestions' }, { status: 500 });
   }
 }

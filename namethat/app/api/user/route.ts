@@ -45,3 +45,30 @@ export async function GET(req: NextRequest) {
   }
   return NextResponse.json(user);
 }
+
+// PATCH /api/user -> update username and profile (e.g., bio)
+export async function PATCH(req: NextRequest) {
+  try {
+    const { id, username, bio } = await req.json();
+    if (!id) return NextResponse.json({ error: 'Missing wallet address (id)' }, { status: 400 });
+
+    // Build profile json merge
+    const existing = await db.user.findUnique({ where: { id } });
+    if (!existing) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+
+    const profile = (existing.profile as any) || {};
+    if (typeof bio === 'string') profile.bio = bio;
+
+    const updated = await db.user.update({
+      where: { id },
+      data: {
+        username: typeof username === 'string' && username.trim() ? username.trim() : existing.username,
+        profile,
+      },
+    });
+    return NextResponse.json(updated);
+  } catch (e) {
+    console.error('PATCH /api/user failed', e);
+    return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
+  }
+}

@@ -4,9 +4,10 @@ import React, { useEffect, useState, useCallback } from "react";
 import WalletConnectMenu from '@/app/components/WalletConnectMenu';
 import { Trophy, Medal, Award, LogOut, Eye, EyeOff, Copy, Check } from "lucide-react";
 import UserPostCard from '@/app/components/UserPostCard';
-import { useAccount, useDisconnect } from 'wagmi';
+import { useAccount, useDisconnect, useWalletClient, usePublicClient } from 'wagmi';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { encodeFunctionData } from 'viem';
 
 interface ApiPost {
     id: string;
@@ -35,6 +36,8 @@ const ProfilePage = () => {
     const [copied, setCopied] = useState(false);
     const { address, isConnected } = useAccount();
     const { disconnect } = useDisconnect();
+    const { data: walletClient } = useWalletClient();
+    const publicClient = usePublicClient();
     const router = useRouter();
 
     const handleDisconnect = () => {
@@ -65,6 +68,7 @@ const ProfilePage = () => {
     const [postsLoading, setPostsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
+    const [metrics, setMetrics] = useState<{ postsCount: number; votesCast: number; totalEarnedEth: number } | null>(null);
 
     // Centralized loader so we always fetch views, suggestions and votes consistently
     const loadPosts = useCallback(async () => {
@@ -97,31 +101,18 @@ const ProfilePage = () => {
                     suggestions = sj.suggestions || [];
                 } catch { }
 
-                // votes for this post
-                let votesForPost: { suggestionId: string }[] = [];
-                try {
-                    const votesRes = await fetch(`/api/votes?postId=${p.id}`);
-                    const votesJson = await votesRes.json();
-                    votesForPost = votesJson.votes || [];
-                } catch { }
-
-                // enrich suggestions with username and vote counts
+                // enrich suggestions with username and vote counts (votes provided by /api/suggestions)
                 let totalVotes = 0;
-                const suggestionsWithDetails = await Promise.all(suggestions.map(async (s: ApiSuggestion) => {
-                    let authorUsername = null;
-                    try {
-                        const userRes = await fetch(`/api/user?id=${s.author}`);
-                        const userData = await userRes.json();
-                        authorUsername = userData?.username;
-                    } catch { }
-                    const votes = votesForPost.filter(v => v.suggestionId === s.id).length;
+                const suggestionsWithDetails = suggestions.map((s: ApiSuggestion) => {
+                    const authorUsername = s.authorUsername ?? null;
+                    const votes = s.votes ?? 0;
                     totalVotes += votes;
                     return {
                         ...s,
                         authorUsername,
                         votes,
                     };
-                }));
+                });
 
                 dict[p.id] = suggestionsWithDetails;
                 postVotes[p.id] = totalVotes;
@@ -141,7 +132,11 @@ const ProfilePage = () => {
     }, [address]);
 
     useEffect(() => {
-        if (address) loadPosts();
+        if (address) {
+            loadPosts();
+            // load metrics
+            fetch(`/api/profile/metrics?id=${address}`).then(r => r.json()).then(setMetrics).catch(() => setMetrics({ postsCount: 0, votesCast: 0, totalEarnedEth: 0 }));
+        }
     }, [loadPosts, address]);
 
     // Track client mount to avoid SSR/client markup mismatch
@@ -179,10 +174,51 @@ const ProfilePage = () => {
     };
 
     const handlePickWinner = async (postId: string, optionId: string) => {
-        if (!address) return;
-        await fetch('/api/winner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ postId, winnerSuggestionId: optionId, caller: address }) });
-        // reload posts and related data (views/votes)
-        await loadPosts();
+        if (!address || !walletClient || !publicClient) return;
+        try {
+            // Phase 1: prepare
+            const prepRes = await fetch('/api/winner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ postId, winnerSuggestionId: optionId, caller: address }) });
+            if (!prepRes.ok) {
+                console.error('Failed to prepare winner select', await prepRes.text());
+                return;
+            }
+            const prep = await prepRes.json();
+            const { escrowAddress, winnerAddress, voters } = prep;
+            if (!escrowAddress || !winnerAddress) return;
+
+            // Encode distribute call
+            const abi = [{
+                inputs: [
+                    { internalType: 'address', name: 'winner', type: 'address' },
+                    { internalType: 'address[]', name: 'voters', type: 'address[]' },
+                ],
+                name: 'distribute',
+                outputs: [],
+                stateMutability: 'nonpayable',
+                type: 'function',
+            }];
+            const data = encodeFunctionData({ abi, functionName: 'distribute', args: [winnerAddress as `0x${string}`, (voters || []) as `0x${string}`[]] });
+
+            // Send tx from creator
+            const txHash = await (walletClient as any).sendTransaction({
+                to: escrowAddress as `0x${string}`,
+                data,
+                account: address as `0x${string}`,
+            });
+            const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
+            const status = (receipt as any).status;
+            if (status === 'reverted' || status === 0 || status === '0x0') {
+                console.error('Distribution tx reverted');
+                return;
+            }
+
+            // Phase 2: confirm
+            await fetch('/api/winner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ postId, winnerSuggestionId: optionId, caller: address, txHash }) });
+
+            await loadPosts();
+        } catch (e) {
+            console.error('Pick winner failed', e);
+        }
     };
 
     // Removed leaderboard data and helpers
@@ -243,7 +279,37 @@ const ProfilePage = () => {
                 </div>
                 {isConnected ? (
                     <>
-                        <h2 className="mt-4 font-semibold text-lg">{user?.username || 'Loading...'}</h2>
+                        <h2 className="mt-4 font-semibold text-lg flex items-center gap-2">
+                            {user?.username || 'Loading...'}
+                            <button
+                                onClick={async () => {
+                                    const newName = prompt('Enter new username', user?.username || '');
+                                    if (newName && address) {
+                                        await fetch('/api/user', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: address, username: newName }) });
+                                        // refresh user
+                                        try { const res = await fetch(`/api/user?id=${address}`); const data = await res.json(); setUser(data); } catch {}
+                                    }
+                                }}
+                                className="text-xs px-2 py-1 rounded bg-[#324859] hover:bg-[#3a5366]"
+                                title="Edit username"
+                            >
+                                Edit
+                            </button>
+                        </h2>
+                        <div className="text-xs text-[#F3E3EA]/80 mt-1">
+                            <span>{(user as any)?.profile?.bio || 'Add a short bio...'}</span>
+                            <button
+                                onClick={async () => {
+                                    const newBio = prompt('Enter bio', (user as any)?.profile?.bio || '');
+                                    if (newBio !== null && address) {
+                                        await fetch('/api/user', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: address, bio: newBio }) });
+                                        try { const res = await fetch(`/api/user?id=${address}`); const data = await res.json(); setUser(data); } catch {}
+                                    }
+                                }}
+                                className="ml-2 text-xs px-2 py-0.5 rounded bg-[#324859] hover:bg-[#3a5366]"
+                                title="Edit bio"
+                            >Edit</button>
+                        </div>
                         <div className="flex flex-wrap items-center justify-center gap-2 text-[#F3E3EA]/70 text-sm px-4">
                             <span className="break-all max-w-[200px]">{formatAddress(address)}</span>
                             <div className="flex items-center gap-2 shrink-0">
@@ -294,12 +360,12 @@ const ProfilePage = () => {
                         <div className="text-[#F3E3EA]/70 text-xs">Posts</div>
                     </div>
                     <div>
-                        <div className="text-[#FBE2A7] font-semibold">1.3 ETH</div>
-                        <div className="text-[#F3E3EA]/70 text-xs">Total Prizes</div>
+                        <div className="text-[#FBE2A7] font-semibold">{metrics?.totalEarnedEth?.toFixed(4) ?? '0.0000'} ETH</div>
+                        <div className="text-[#F3E3EA]/70 text-xs">Total Earned</div>
                     </div>
                     <div>
-                        <div className="text-[#FBE2A7] font-semibold">245</div>
-                        <div className="text-[#F3E3EA]/70 text-xs">Total Votes</div>
+                        <div className="text-[#FBE2A7] font-semibold">{metrics?.votesCast ?? 0}</div>
+                        <div className="text-[#F3E3EA]/70 text-xs">Votes Cast</div>
                     </div>
                 </div>
             </div>

@@ -69,17 +69,19 @@ const Leaderboard = () => {
     };
 
     useEffect(() => {
-        // Use sample data instead of API calls for now
-        if (activeTab === 'All') {
-            setRows(sampleData.all);
-        } else {
-            // Calculate trending scores for trending tab
-            const trendingWithScores = sampleData.trending.map(post => ({
-                ...post,
-                score: calculateTrendingScore(post.totalVotes || 0, post.totalViews || 0, post.createdAt || '')
-            }));
-            setRows(trendingWithScores);
-        }
+        const load = async () => {
+            try {
+                const mode = activeTab === 'All' ? 'all' : 'trending';
+                const res = await fetch(`/api/leaderboard?mode=${mode}&windowDays=7&limit=10`);
+                const json = await res.json();
+                const rows = (json.rows || []) as LBRow[];
+                setRows(rows);
+            } catch (e) {
+                console.error('Failed to load leaderboard', e);
+                setRows([]);
+            }
+        };
+        load();
     }, [activeTab]);
 
     return (
