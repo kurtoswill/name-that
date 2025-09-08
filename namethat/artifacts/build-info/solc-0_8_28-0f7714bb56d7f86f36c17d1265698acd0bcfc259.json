@@ -1,0 +1,39 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-0f7714bb56d7f86f36c17d1265698acd0bcfc259",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "userSourceNameMap": {
+    "contracts/Counter.sol": "project/contracts/Counter.sol",
+    "contracts/PostEscrow.sol": "project/contracts/PostEscrow.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/Counter.sol": {
+        "content": "// SPDX-License-Identifier: UNLICENSED\r\npragma solidity ^0.8.28;\r\n\r\ncontract Counter {\r\n  uint public x;\r\n\r\n  event Increment(uint by);\r\n\r\n  function inc() public {\r\n    x++;\r\n    emit Increment(1);\r\n  }\r\n\r\n  function incBy(uint by) public {\r\n    require(by > 0, \"incBy: increment should be positive\");\r\n    x += by;\r\n    emit Increment(by);\r\n  }\r\n}\r\n"
+      },
+      "project/contracts/PostEscrow.sol": {
+        "content": "// SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.20;\r\n\r\ncontract PostEscrow {\r\n    address public creator;\r\n    address public platformTreasury;\r\n    uint256 public totalPrize;\r\n    bool public active;\r\n\r\n    constructor() payable {\r\n        creator = msg.sender;\r\n        totalPrize = msg.value;\r\n        active = true;\r\n    }\r\n\r\n    modifier onlyCreator() {\r\n        require(msg.sender == creator, \"Not creator\");\r\n        _;\r\n    }\r\n\r\n    function setPlatformTreasury(address _treasury) external onlyCreator {\r\n        require(_treasury != address(0), \"Invalid address\");\r\n        platformTreasury = _treasury;\r\n    }\r\n\r\n    function distribute(address winner, address[] calldata voters) external onlyCreator {\r\n        require(active, \"Already distributed\");\r\n        require(winner != address(0), \"Invalid winner\");\r\n\r\n        uint256 winnerShare = (totalPrize * 50) / 100;\r\n        uint256 votersShare = (totalPrize * 30) / 100;\r\n        uint256 platformShare = totalPrize - winnerShare - votersShare;\r\n\r\n        active = false;\r\n\r\n        payable(winner).transfer(winnerShare);\r\n\r\n        if (voters.length > 0 && votersShare > 0) {\r\n            uint256 perVoter = votersShare / voters.length;\r\n            for (uint256 i = 0; i < voters.length; i++) {\r\n                payable(voters[i]).transfer(perVoter);\r\n            }\r\n        }\r\n\r\n        if (platformTreasury != address(0) && platformShare > 0) {\r\n            payable(platformTreasury).transfer(platformShare);\r\n        }\r\n    }\r\n\r\n    function deletePost() external onlyCreator {\r\n        require(active, \"Already finalized\");\r\n        active = false;\r\n        payable(creator).transfer(address(this).balance);\r\n    }\r\n}\r\n"
+      }
+    }
+  }
+}

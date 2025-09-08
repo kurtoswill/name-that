@@ -388,7 +388,7 @@ export default function CreatePage() {
 
                 // Compute amounts
                 const prizeValue = BigInt(Math.round(parseFloat(ethPrize || '0') * 1e18));
-                const feeValue = (prizeValue * 20n) / 100n; // 20%
+                const feeValue = (prizeValue * BigInt(20)) / BigInt(100); // 20%
                 const feeRecipient = (typeof process !== 'undefined' && process.env && (process.env.NEXT_PUBLIC_PLATFORM_FEE_RECIPIENT as string | undefined)) || undefined;
                 if (!feeRecipient) {
                     throw new Error('Platform fee recipient is not configured');

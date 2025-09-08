@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const postIds = posts.map(p => p.id);
     if (postIds.length === 0) return NextResponse.json({ rows: [] });
 
-    // Votes per post
+    // Votes per post (all time and recent)
     const votes = await db.vote.groupBy({
       by: ['postId'],
       where: { postId: { in: postIds } },
@@ -27,8 +27,15 @@ export async function GET(req: NextRequest) {
     });
     const votesMap = new Map(votes.map(v => [v.postId, v._count.postId]));
 
-    // Views per post; trending counts within window
     const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+    const votesRecent = await db.vote.groupBy({
+      by: ['postId'],
+      where: { postId: { in: postIds }, createdAt: { gte: since } },
+      _count: { postId: true },
+    });
+    const votesRecentMap = new Map(votesRecent.map(v => [v.postId, v._count.postId]));
+
+    // Views per post (all time and recent)
     const viewsAll = await db.view.groupBy({
       by: ['postId'],
       where: { postId: { in: postIds } },
@@ -43,18 +50,59 @@ export async function GET(req: NextRequest) {
     });
     const viewsWindowMap = new Map(viewsWindow.map(v => [v.postId, v._count.postId]));
 
+    // Suggestions per post (as additional interaction metric)
+    const suggestions = await db.suggestion.groupBy({
+      by: ['postId'],
+      where: { postId: { in: postIds } },
+      _count: { postId: true },
+    });
+    const suggestionsMap = new Map(suggestions.map(s => [s.postId, s._count.postId]));
+
     // Build rows
     const rows = posts.map(p => {
       const totalVotes = votesMap.get(p.id) || 0;
       const totalViews = viewsAllMap.get(p.id) || 0;
       const recentViews = viewsWindowMap.get(p.id) || 0;
-      // simple trending score based on recent views and votes recency-neutral
+      const recentVotes = votesRecentMap.get(p.id) || 0;
+      const suggestionsCount = suggestionsMap.get(p.id) || 0;
+
+      // Enhanced trending score calculation
       const ageHrs = Math.max(1, (Date.now() - p.createdAt.getTime()) / (1000 * 60 * 60));
-      const voteVelocity = totalVotes / ageHrs;
-      const engagementRate = totalViews > 0 ? totalVotes / totalViews : 0;
-      const timeDecay = Math.max(0.1, 1 / Math.sqrt(ageHrs / 24));
-      const score = Math.round(((engagementRate * 100) + (voteVelocity * 10) + (recentViews)) * timeDecay * 100) / 100;
-      return { postId: p.id, totalVotes, totalViews, createdAt: p.createdAt.toISOString(), score };
+
+      // Recent engagement metrics (more important for trending)
+      const recentEngagementRate = recentViews > 0 ? recentVotes / recentViews : 0;
+      const recentVoteVelocity = recentVotes / Math.max(1, ageHrs); // votes per hour in window
+
+      // Overall engagement
+      const overallEngagementRate = totalViews > 0 ? totalVotes / totalViews : 0;
+
+      // Time decay: newer posts get higher scores, but with diminishing returns
+      const timeDecay = Math.max(0.1, 1 / Math.pow(ageHrs / 24, 0.3));
+
+      // Interaction diversity bonus (suggestions indicate more engagement)
+      const interactionBonus = Math.min(5, suggestionsCount * 0.5);
+
+      // Trending score formula
+      const trendingScore = (
+        (recentEngagementRate * 150) +     // Recent engagement (highest weight)
+        (recentVoteVelocity * 50) +        // Recent vote velocity
+        (overallEngagementRate * 50) +     // Overall engagement
+        (recentViews * 0.1) +             // Recent views
+        interactionBonus                   // Interaction diversity
+      ) * timeDecay;
+
+      const score = Math.round(trendingScore * 100) / 100;
+
+      return {
+        postId: p.id,
+        totalVotes,
+        totalViews,
+        createdAt: p.createdAt.toISOString(),
+        score,
+        recentVotes,
+        recentViews,
+        suggestionsCount
+      };
     });
 
     let sorted: typeof rows;

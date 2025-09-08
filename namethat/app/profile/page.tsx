@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import WalletConnectMenu from '@/app/components/WalletConnectMenu';
-import { Trophy, Medal, Award, LogOut, Eye, EyeOff, Copy, Check } from "lucide-react";
+import { Trophy, Medal, Award, LogOut, Eye, EyeOff, Copy, Check, Edit } from "lucide-react";
 import UserPostCard from '@/app/components/UserPostCard';
 import { useAccount, useDisconnect, useWalletClient, usePublicClient } from 'wagmi';
 import { useRouter } from 'next/navigation';
@@ -279,7 +279,7 @@ const ProfilePage = () => {
                 </div>
                 {isConnected ? (
                     <>
-                        <h2 className="mt-4 font-semibold text-lg flex items-center gap-2">
+                        <h2 className="mt-4 font-semibold text-lg flex items-center justify-center gap-2">
                             {user?.username || 'Loading...'}
                             <button
                                 onClick={async () => {
@@ -290,26 +290,12 @@ const ProfilePage = () => {
                                         try { const res = await fetch(`/api/user?id=${address}`); const data = await res.json(); setUser(data); } catch {}
                                     }
                                 }}
-                                className="text-xs px-2 py-1 rounded bg-[#324859] hover:bg-[#3a5366]"
+                                className="text-xs px-2 py-1 rounded"
                                 title="Edit username"
                             >
-                                Edit
+                                <Edit className="w-4 h-4" />
                             </button>
                         </h2>
-                        <div className="text-xs text-[#F3E3EA]/80 mt-1">
-                            <span>{(user as any)?.profile?.bio || 'Add a short bio...'}</span>
-                            <button
-                                onClick={async () => {
-                                    const newBio = prompt('Enter bio', (user as any)?.profile?.bio || '');
-                                    if (newBio !== null && address) {
-                                        await fetch('/api/user', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: address, bio: newBio }) });
-                                        try { const res = await fetch(`/api/user?id=${address}`); const data = await res.json(); setUser(data); } catch {}
-                                    }
-                                }}
-                                className="ml-2 text-xs px-2 py-0.5 rounded bg-[#324859] hover:bg-[#3a5366]"
-                                title="Edit bio"
-                            >Edit</button>
-                        </div>
                         <div className="flex flex-wrap items-center justify-center gap-2 text-[#F3E3EA]/70 text-sm px-4">
                             <span className="break-all max-w-[200px]">{formatAddress(address)}</span>
                             <div className="flex items-center gap-2 shrink-0">
@@ -335,9 +321,20 @@ const ProfilePage = () => {
                                 </button>
                             </div>
                         </div>
-                        <p className="mt-3 text-sm text-[#F3E3EA]/80">
-                            Photographer & NFT creator | Building on Base | Seeking creative alpha from the FC community
-                        </p>
+                        <div className="mt-3 text-sm text-[#F3E3EA]/80">
+                            <span>{(user as any)?.profile?.bio || 'Add bio'}</span>
+                            <button
+                                onClick={async () => {
+                                    const newBio = prompt('Enter bio', (user as any)?.profile?.bio || '');
+                                    if (newBio !== null && address) {
+                                        await fetch('/api/user', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: address, bio: newBio }) });
+                                        try { const res = await fetch(`/api/user?id=${address}`); const data = await res.json(); setUser(data); } catch {}
+                                    }
+                                }}
+                                className="ml-2 text-xs px-2 py-0.5 rounded"
+                                title="Edit bio"
+                            ><Edit className="w-4 h-4" /></button>
+                        </div>
                     </>
                 ) : (
                     <div className="mt-2">
