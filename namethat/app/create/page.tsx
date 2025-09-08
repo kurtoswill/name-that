@@ -366,7 +366,8 @@ export default function CreatePage() {
             // so instead we'll call an API route that performs deployment server-side using a funded deployer.
 
             let escrowAddress: string | undefined = undefined;
-            const deployTxHash: string | undefined = undefined;
+            let deployTxHash: string | undefined = undefined;
+            let feeTxHash: string | undefined = undefined;
 
                 // walletClient/publicClient are used for deploy + refund flows
                 try {
@@ -385,24 +386,41 @@ export default function CreatePage() {
                         throw new Error('Unable to access wallet client or injected provider for on-chain operations');
                     }
 
-                // We need the compiled bytecode for PostEscrow. Request it from an API route that can return it from artifacts.
+                // Compute amounts
+                const prizeValue = BigInt(Math.round(parseFloat(ethPrize || '0') * 1e18));
+                const feeValue = (prizeValue * 20n) / 100n; // 20%
+                const feeRecipient = (typeof process !== 'undefined' && process.env && (process.env.NEXT_PUBLIC_PLATFORM_FEE_RECIPIENT as string | undefined)) || undefined;
+                if (!feeRecipient) {
+                    throw new Error('Platform fee recipient is not configured');
+                }
+
+                // 1) Pay platform fee upfront
+                feeTxHash = await sendTxWithFallback({
+                    to: feeRecipient as `0x${string}`,
+                    value: feeValue,
+                    account: address as `0x${string}`,
+                });
+                const feeRcpt = await publicClient.waitForTransactionReceipt({ hash: feeTxHash as `0x${string}` });
+                const feeStatus = (feeRcpt as unknown as { status?: string | number }).status;
+                const feeFailed = feeStatus === 'reverted' || feeStatus === 0 || feeStatus === '0x0' || feeStatus === 'failed';
+                if (feeFailed) {
+                    throw new Error('Platform fee transaction failed');
+                }
+
+                // 2) Fetch compiled bytecode and deploy escrow with full prize value
                 const byteRes = await fetch('/api/bytecode?contract=PostEscrow');
                 if (!byteRes.ok) throw new Error('Failed to fetch contract bytecode');
                 const { bytecode } = await byteRes.json();
                 if (!bytecode) throw new Error('No bytecode available for PostEscrow');
 
-                // Prepare write (deploy contract) via wagmi core
-                const prizeValue = BigInt(Math.round(parseFloat(ethPrize || '0') * 1e18));
-
-                // No prepareWriteContract available in this environment; deploy by sending raw tx with bytecode + value
-
-                // Fallback: send raw transaction with data = bytecode and value
+                // Deploy by sending raw tx with bytecode + value
                 const txHash = await sendTxWithFallback({
                     to: undefined,
                     data: bytecode,
                     value: prizeValue,
                     account: address as `0x${string}`,
                 });
+                deployTxHash = txHash as string;
 
                 // wait for tx to be mined
                 const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
@@ -459,6 +477,7 @@ export default function CreatePage() {
                     creator: address,
                     escrowAddress,
                     deployTxHash,
+                    feeTxHash,
                 }),
             });
 
