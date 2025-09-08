@@ -2,7 +2,7 @@ import "./theme.css";
 import "@coinbase/onchainkit/styles.css";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Providers } from "./providers";
+import ProvidersClient from './providers-client';
 import Navbar from "@/app/components/Navbar";
 
 export const viewport: Viewport = {
@@ -44,10 +44,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-background">
-        <Providers>
+        <ProvidersClient>
             {children}
           <Navbar />
-        </Providers>
+        </ProvidersClient>
 
       </body>
     </html>

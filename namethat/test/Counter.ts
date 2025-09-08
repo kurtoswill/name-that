@@ -14,7 +14,7 @@ describe("Counter", async function () {
       counter.write.inc(),
       counter,
       "Increment",
-      [1n],
+      [BigInt(1)],
     );
   });
 
@@ -23,7 +23,7 @@ describe("Counter", async function () {
     const deploymentBlockNumber = await publicClient.getBlockNumber();
 
     // run a series of increments
-    for (let i = 1n; i <= 10n; i++) {
+    for (let i = BigInt(1); i <= BigInt(10); i = i + BigInt(1)) {
       await counter.write.incBy([i]);
     }
 
@@ -36,9 +36,9 @@ describe("Counter", async function () {
     });
 
     // check that the aggregated events match the current value
-    let total = 0n;
+  let total = BigInt(0);
     for (const event of events) {
-      total += event.args.by;
+      total += (event.args as any).by;
     }
 
     assert.equal(total, await counter.read.x());

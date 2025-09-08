@@ -1,13 +1,14 @@
-import { viem } from "hardhat";
+import hardhat from "hardhat";
 
 async function main() {
+    const viem = (hardhat as any).viem;
     const [deployer] = await viem.getWalletClients();
     const publicClient = await viem.getPublicClient();
 
     console.log("Deploying contracts with:", deployer.account.address);
 
     const hash = await deployer.deployContract("PostEscrow", [], {
-        value: 1000000000000000000n, // 1 ETH
+        value: BigInt("1000000000000000000"), // 1 ETH
     });
 
     const receipt = await publicClient.waitForTransactionReceipt({ hash });

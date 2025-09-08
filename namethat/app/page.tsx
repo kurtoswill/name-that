@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, ArrowUp } from 'lucide-react';
 import { useAccount, useBalance, useBlockNumber } from 'wagmi';
-import { ConnectWallet } from '@coinbase/onchainkit/wallet';
+import WalletConnectMenu from '@/app/components/WalletConnectMenu';
 import PostCard from '@/app/components/PostCard';
 import Image from 'next/image';
-
 
 interface ApiPost { id: string; creator: string; title: string; description: string; imageUrl?: string | null; createdAt: string; prizeEth: string; usdAtCreation: string; _count?: { votes: number; suggestions: number; views: number } }
 interface ApiSuggestion { id: string; postId: string; author: string; text: string; votes?: number }
@@ -18,6 +17,8 @@ interface ApiUser {
 }
 
 export default function HomePage() {
+    const [isHydrated, setIsHydrated] = useState(false);
+    useEffect(() => { setIsHydrated(true); }, []);
     const { address, isConnected } = useAccount();
     const { data: balance, refetch: refetchBalance } = useBalance({ address });
     // subscribe to new blocks and refetch balance when a block arrives (no polling)
@@ -37,6 +38,28 @@ export default function HomePage() {
     const [usernames, setUsernames] = useState<Record<string, string>>({});
     const [userVotes, setUserVotes] = useState<Record<string, string>>({}); // postId -> suggestionId
     const [loadingPosts, setLoadingPosts] = useState(true);
+    const [showScrollTop, setShowScrollTop] = useState(false);
+    const [scrollY, setScrollY] = useState(0);
+
+    // Show scroll-to-top button when user scrolls down
+    useEffect(() => {
+        const handleScroll = () => {
+            // Appear sooner on shorter pages
+            const y = window.scrollY || 0;
+            setScrollY(y);
+            setShowScrollTop(y > 300);
+        };
+
+        window.addEventListener('scroll', handleScroll);
+        // run once to set initial value
+        handleScroll();
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    // Scroll to top function
+    const scrollToTop = () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
 
     // Always fetch posts, suggestions, and usernames on load
     useEffect(() => {
@@ -79,7 +102,7 @@ export default function HomePage() {
         };
         load();
     }, []); // Only run on initial load
-
+    <div className="min-h-screen bg-gradient-to-b from-[#1a2f3a] to-[#12242E] text-[#F3E3EA] relative overflow-visible"></div>
     // Fetch user votes only when wallet is connected
     useEffect(() => {
         if (!isConnected || !address) return;
@@ -100,27 +123,27 @@ export default function HomePage() {
     }, [isConnected, address]);
 
     useEffect(() => {
-    const syncUser = async () => {
-        if (!address) return;
-        const res = await fetch('/api/user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: address })
-        });
-        if (!res.ok) {
-            // Optionally log the error response
-            const text = await res.text();
-            console.error('User API error:', res.status, text);
-            return;
+        const syncUser = async () => {
+            if (!address) return;
+            const res = await fetch('/api/user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: address })
+            });
+            if (!res.ok) {
+                // Optionally log the error response
+                const text = await res.text();
+                console.error('User API error:', res.status, text);
+                return;
+            }
+            const data = await res.json();
+            setUser(data);
+            setUsername(data.username || `User${address.slice(-6)}`);
+        };
+        if (isConnected && address) {
+            syncUser();
         }
-        const data = await res.json();
-        setUser(data);
-        setUsername(data.username || `User${address.slice(-6)}`);
-    };
-    if (isConnected && address) {
-        syncUser();
-    }
-}, [isConnected, address]);
+    }, [isConnected, address]);
 
 
     // Record a view and update the UI with the new view count
@@ -204,19 +227,21 @@ export default function HomePage() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-[#1a2f3a] to-[#12242E] text-[#F3E3EA] relative overflow-hidden">
+        <div className="min-h-screen bg-gradient-to-b from-[#1a2f3a] to-[#12242E] text-[#F3E3EA] relative overflow-visible">
+            
             {/* Background gradient overlay */}
-                <div className="absolute inset-0 bg-gradient-to-b from-[#1a2f3a]/80 to-[#12242E]/90"></div>
+            <div className="absolute inset-0 bg-gradient-to-b from-[#1a2f3a]/80 to-[#12242E]/90"></div>
 
-            {/* Header with wallet connection only */}
-            <div className="sticky top-0 z-20 p-4">
-                <div className="flex items-center justify-between">
+            {/* Fixed Header with wallet connection */}
+            <div className="fixed top-0 left-0 right-0 z-50 p-4 border-b-2 border-[#324859]/50 backdrop-blur-sm bg-[#1a3643]">
+                <div className="flex items-center justify-between max-w-7xl mx-auto">
                     <Image src="/namethat-logo.png" alt="NameThat Logo" width={60} height={60} className="mr-2" />
-                    {!isConnected ? (
+                    {!isHydrated ? (
+                        // Stable placeholder while hydrating to avoid SSR/CSR mismatch
+                        <div className="w-32 h-10" />
+                    ) : !isConnected ? (
                         <div className="mini-app-theme" style={{ touchAction: 'manipulation' }}>
-                            <ConnectWallet className="bg-[#21B65F] hover:bg-[#1ea856] text-[#12242E] px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
-                                <span>Connect Wallet</span>
-                            </ConnectWallet>
+                            <WalletConnectMenu />
                         </div>
                     ) : (
                         <a href="/profile" className="group" aria-label="Open profile" title="Open profile">
@@ -236,133 +261,68 @@ export default function HomePage() {
                     )}
                 </div>
             </div>
-
-            {/* Main Content */}
-            <div className="relative z-10 flex flex-col items-center justify-center min-h-[80vh] px-4">
-                {/* Glowing NameThat Title */}
-                <div className="text-center mb-16 relative">
-                    <div className="relative inline-block">
-                        <Image
-                            src="/NameThat.svg"
-                            alt="NameThat"
-                            width={320}
-                            height={80}
-                            className="w-64 md:w-80 h-auto animate-glow"
-                            style={{
-                                filter: 'drop-shadow(0 0 20px rgba(228, 162, 177, 0.6)) drop-shadow(0 0 40px rgba(251, 226, 167, 0.4))'
-                            }}
-                        />
-                    </div>
-                </div>
-
-                {/* Anime Character Carousel */}
-                <div className="relative w-full max-w-4xl">
-                    <div className="flex items-center justify-center">
-                        {/* Left character (blurred) */}
-                        <div className="absolute left-0 transform -translate-x-1/2 w-48 h-48 opacity-60 blur-sm animate-float" style={{ animationDelay: '0.5s' }}>
-                            <div className="w-full h-full bg-gradient-to-br from-[#E4A2B1] to-[#FBE2A7] rounded-lg p-1">
-                                <div className="w-full h-full bg-[#20333D] rounded-lg flex items-center justify-center">
-                                    <div className="text-center text-white/60">
-                                        <div className="w-16 h-16 bg-[#324859] rounded-full mx-auto mb-2"></div>
-                                        <div className="text-xs">Character</div>
-                                    </div>
-                                </div>
+            {/* Scroll to top button */}
+            {showScrollTop && (
+                <button
+                    onClick={scrollToTop}
+                    style={{ zIndex: 99999 }}
+                    className="fixed bottom-28 right-6 p-3 bg-[#21B65F] hover:bg-[#1ea856] text-white rounded-full shadow-lg transition-all duration-300 hover:scale-110"
+                    aria-label="Scroll to top"
+                >
+                    <ArrowUp size={20} />
+                </button>
+            )}
+            {/* Main Content - Add padding to account for fixed header */}
+            <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-0 pt-24">
+                {/* Posts Section */}
+                <div className="relative z-0 p-4 pb-32 w-full max-w-4xl mx-auto">
+                    <div className="space-y-6">
+                        {loadingPosts ? (
+                            <div className="flex flex-col items-center justify-center py-16">
+                                <svg className="animate-spin h-10 w-10 text-[#E4A2B1] mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                </svg>
+                                <div className="text-[#E4A2B1] text-lg font-medium">Loading posts...</div>
                             </div>
-                        </div>
-
-                        {/* Center character (focused) */}
-                        <div className="relative z-10 w-64 h-64 animate-float">
-                            <div className="w-full h-full bg-gradient-to-br from-[#E4A2B1] to-[#FBE2A7] rounded-xl p-2 shadow-2xl animate-glow">
-                                <div className="w-full h-full bg-[#20333D] rounded-lg flex items-center justify-center relative overflow-hidden">
-                                    {/* Character placeholder - you can replace with actual images */}
-                                    <div className="text-center text-white">
-                                        <div className="w-24 h-24 bg-gradient-to-br from-[#E4A2B1] to-[#FBE2A7] rounded-full mx-auto mb-4 flex items-center justify-center animate-pulse-glow">
-                                            <div className="w-16 h-16 bg-[#324859] rounded-full"></div>
-                                        </div>
-                                        <div className="text-lg font-semibold mb-2 text-glow">Anime Character</div>
-                                        <div className="text-sm text-white/70">Guess the name!</div>
-                                    </div>
-                                    {/* Enhanced glow effect */}
-                                    <div className="absolute inset-0 bg-gradient-to-br from-[#E4A2B1]/20 to-[#FBE2A7]/20 rounded-lg blur-xl animate-pulse-glow"></div>
-                                    <div className="absolute inset-0 bg-gradient-to-br from-[#E4A2B1]/10 to-[#FBE2A7]/10 rounded-lg blur-2xl animate-pulse-glow" style={{ animationDelay: '2s' }}></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Right character (blurred) */}
-                        <div className="absolute right-0 transform translate-x-1/2 w-48 h-48 opacity-60 blur-sm animate-float" style={{ animationDelay: '1.5s' }}>
-                            <div className="w-full h-full bg-gradient-to-br from-[#E4A2B1] to-[#FBE2A7] rounded-lg p-1">
-                                <div className="w-full h-full bg-[#20333D] rounded-lg flex items-center justify-center">
-                                    <div className="text-center text-white/60">
-                                        <div className="w-16 h-16 bg-[#324859] rounded-full mx-auto mb-2"></div>
-                                        <div className="text-xs">Character</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        ) : (
+                            posts.map((post) => {
+                                const suggestions = suggestionsByPost[post.id] || [];
+                                const nameOptions = suggestions.map(s => ({
+                                    id: s.id,
+                                    name: s.text,
+                                    // keep raw author address for ownership checks
+                                    author: s.author,
+                                    // separate display-friendly author name
+                                    authorDisplay: usernames[s.author] || s.author,
+                                    ethReward: post.prizeEth + ' ETH',
+                                    voteCount: s.votes?.toString() || '0'
+                                }));
+                                const votedSuggestionId = userVotes[post.id];
+                                return (
+                                    <PostCard
+                                        key={post.id}
+                                        id={post.id}
+                                        author={usernames[post.creator] || post.creator}
+                                        timeAgo={timeAgo(post.createdAt)}
+                                        image={post.imageUrl || '/placeholder.jpg'}
+                                        description={post.description}
+                                        nameOptions={nameOptions}
+                                        totalViews={post._count?.views ?? 0}
+                                        totalVotes={post._count?.votes || 0}
+                                        totalPrize={parseFloat(post.prizeEth)}
+                                        isWalletConnected={isConnected}
+                                        votedSuggestionId={votedSuggestionId}
+                                        onAddName={(newName, setAddNameError) => handleAddName(post.id, newName, setAddNameError)}
+                                        onVote={(optionId) => handleVote(post.id, optionId)}
+                                    />
+                                );
+                            })
+                        )}
                     </div>
-                </div>
-
-                {/* Scroll indicator */}
-                <div className="mt-16 text-center text-[#FBE2A7]/80 animate-float" style={{ animationDelay: '2.5s' }}>
-                    <div className="w-6 h-6 mx-auto mb-2">
-                        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
-                            {/* Double upward-pointing chevron/arrow */}
-                            <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" />
-                            <path d="M7.41 11.41L12 6.83l4.59 4.58L18 10l-6-6-6 6z" />
-                        </svg>
-                    </div>
-                    <div className="text-sm">Scroll up</div>
                 </div>
             </div>
 
-            {/* Posts Section */}
-            <div className="relative z-0 p-4 pb-32 mt-8">
-                <div className="max-w-4xl mx-auto space-y-6">
-                    {loadingPosts ? (
-                        <div className="flex flex-col items-center justify-center py-16">
-                            <svg className="animate-spin h-10 w-10 text-[#E4A2B1] mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                            </svg>
-                            <div className="text-[#E4A2B1] text-lg font-medium">Loading posts...</div>
-                        </div>
-                    ) : (
-                        posts.map((post) => {
-                            const suggestions = suggestionsByPost[post.id] || [];
-                            const nameOptions = suggestions.map(s => ({
-                                id: s.id,
-                                name: s.text,
-                                // keep raw author address for ownership checks
-                                author: s.author,
-                                // separate display-friendly author name
-                                authorDisplay: usernames[s.author] || s.author,
-                                ethReward: post.prizeEth + ' ETH',
-                                voteCount: s.votes?.toString() || '0'
-                            }));
-                            const votedSuggestionId = userVotes[post.id];
-                            return (
-                                <PostCard
-                                    key={post.id}
-                                    id={post.id}
-                                    author={usernames[post.creator] || post.creator}
-                                    timeAgo={timeAgo(post.createdAt)}
-                                    image={post.imageUrl || '/placeholder.jpg'}
-                                    description={post.description}
-                                    nameOptions={nameOptions}
-                                    totalViews={post._count?.views ?? 0}
-                                    totalVotes={post._count?.votes || 0}
-                                    totalPrize={parseFloat(post.prizeEth)}
-                                    isWalletConnected={isConnected}
-                                    votedSuggestionId={votedSuggestionId}
-                                    onAddName={(newName, setAddNameError) => handleAddName(post.id, newName, setAddNameError)}
-                                    onVote={(optionId) => handleVote(post.id, optionId)}
-                                />
-                            );
-                        })
-                    )}
-                </div>
-            </div>
         </div>
     );
 }

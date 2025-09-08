@@ -3,7 +3,19 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
     try {
-        const { postId, viewerId } = await req.json();
+        let postId: string | undefined;
+        let viewerId: string | undefined;
+        try {
+            const body = await req.text();
+            if (!body) {
+                return NextResponse.json({ error: 'Empty request body' }, { status: 400 });
+            }
+            const json = JSON.parse(body);
+            postId = json.postId;
+            viewerId = json.viewerId;
+        } catch (err) {
+            return NextResponse.json({ error: 'Invalid JSON input' }, { status: 400 });
+        }
 
         if (!postId || !viewerId) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });

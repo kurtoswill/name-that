@@ -12,6 +12,7 @@ interface NameOption {
 }
 
 interface UserPostCardProps {
+    title?: string;
     id: string;
     author: string;
     timeAgo: string;
@@ -26,6 +27,7 @@ interface UserPostCardProps {
 }
 
 export default function UserPostCard({
+    title,
     author,
     timeAgo,
     image,
@@ -78,7 +80,8 @@ export default function UserPostCard({
                             </span>
                         </div>
                         <div>
-                            <div className="text-[#F3E3EA] font-medium text-sm">{author}</div>
+                                <div className="text-[#F3E3EA] font-medium text-sm">{author}</div>
+                                <div className="text-[#FBE2A7] font-semibold text-sm">{title ?? ''}</div>
                             <div className="text-[#FBE2A7]/70 text-xs">{timeAgo}</div>
                         </div>
                     </div>

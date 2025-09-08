@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { ConnectWallet } from '@coinbase/onchainkit/wallet';
+import WalletConnectMenu from '@/app/components/WalletConnectMenu';
 import { Trophy, Medal, Award, LogOut, Eye, EyeOff, Copy, Check } from "lucide-react";
 import UserPostCard from '@/app/components/UserPostCard';
 import { useAccount, useDisconnect } from 'wagmi';
@@ -12,6 +12,7 @@ interface ApiPost {
     id: string;
     creator: string;
     description: string;
+    title?: string;
     imageUrl?: string | null;
     createdAt: string;
     prizeEth: string;
@@ -94,7 +95,7 @@ const ProfilePage = () => {
                     const sr = await fetch(`/api/suggestions?postId=${p.id}`);
                     const sj = await sr.json();
                     suggestions = sj.suggestions || [];
-                } catch {}
+                } catch { }
 
                 // votes for this post
                 let votesForPost: { suggestionId: string }[] = [];
@@ -102,7 +103,7 @@ const ProfilePage = () => {
                     const votesRes = await fetch(`/api/votes?postId=${p.id}`);
                     const votesJson = await votesRes.json();
                     votesForPost = votesJson.votes || [];
-                } catch {}
+                } catch { }
 
                 // enrich suggestions with username and vote counts
                 let totalVotes = 0;
@@ -112,7 +113,7 @@ const ProfilePage = () => {
                         const userRes = await fetch(`/api/user?id=${s.author}`);
                         const userData = await userRes.json();
                         authorUsername = userData?.username;
-                    } catch {}
+                    } catch { }
                     const votes = votesForPost.filter(v => v.suggestionId === s.id).length;
                     totalVotes += votes;
                     return {
@@ -200,9 +201,10 @@ const ProfilePage = () => {
                     <h2 className="text-xl font-semibold mb-2">Connect your wallet</h2>
                     <p className="text-sm text-[#F3E3EA]/70 mb-4">You need to connect your wallet to view and manage your posts.</p>
                     <div className="flex justify-center">
-                        <ConnectWallet className="bg-[#21B65F] hover:bg-[#1ea856] text-[#12242E] px-4 py-2 rounded-lg text-sm font-medium transition-colors" />
-                        Or go back to the <Link href="/" className="text-[#E4A2B1] underline">home page</Link>.
-                    </div>
+                        <WalletConnectMenu />
+                    </div><br />
+                    <span className="mx-2">Or go back to the
+                        <Link href="/" className="text-[#E4A2B1] underline"> home page</Link>.</span>
                 </div>
             </div>
         );
@@ -310,12 +312,13 @@ const ProfilePage = () => {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
                         </svg>
-                            <div className="text-[#E4A2B1] text-lg font-medium">Loading posts...</div>
+                        <div className="text-[#E4A2B1] text-lg font-medium">Loading posts...</div>
                     </div>
                 ) : (posts && posts.length > 0) ? (
                     posts.map((post) => (
                         <UserPostCard
                             key={post.id}
+                            title={post.title}
                             id={post.id}
                             author={user?.username || formatAddress(post.creator)}
                             timeAgo={timeAgo(post.createdAt)}

@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const id = params.id;
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const resolved = await params;
+  const id = resolved.id;
   const { searchParams } = new URL(req.url);
   const caller = searchParams.get("caller") || "";
 

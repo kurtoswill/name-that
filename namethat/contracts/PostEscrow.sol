@@ -5,10 +5,28 @@ contract PostEscrow {
     address public creator;
     uint256 public prizePool;
     bool public winnerSelected;
+    // Platform treasury address that will receive the platform fee (20%)
+    address public platformTreasury;
+    // Platform fee numerator/denominator (20%)
+    uint256 public constant PLATFORM_FEE_NUM = 20;
+    uint256 public constant PLATFORM_FEE_DEN = 100;
+
+    event PlatformTreasurySet(address indexed setter, address indexed treasury);
+    event WinnerSelected(address indexed winner, uint256 winnerShare, uint256 votersShare, uint256 platformFee);
 
     constructor() payable {
         creator = msg.sender;
         prizePool = msg.value;
+    }
+
+    /**
+     * @notice Set the platform treasury address. Only the creator (deployer) may call.
+     * If not set, platform fees will remain in the contract.
+     */
+    function setPlatformTreasury(address _treasury) external {
+        require(msg.sender == creator, "Only creator can set treasury");
+        platformTreasury = _treasury;
+        emit PlatformTreasurySet(msg.sender, _treasury);
     }
 
     function selectWinner(address winner, address[] calldata voters) external {
@@ -22,14 +40,21 @@ contract PostEscrow {
         uint256 votersShare = (prizePool * 30) / 100;
         uint256 platformFee = prizePool - winnerShare - votersShare;
 
+        // Pay winner
         payable(winner).transfer(winnerShare);
 
+        // Pay voters evenly
         uint256 perVoter = voters.length > 0 ? votersShare / voters.length : 0;
         for (uint256 i = 0; i < voters.length; i++) {
             payable(voters[i]).transfer(perVoter);
         }
 
-        // Platform fee stays in contract (could send to treasury instead)
+        // Transfer platform fee to treasury if set, otherwise keep in contract
+        if (platformTreasury != address(0) && platformTreasury != address(this)) {
+            payable(platformTreasury).transfer(platformFee);
+        }
+
+        emit WinnerSelected(winner, winnerShare, votersShare, platformFee);
     }
 
     function deletePost() external {
